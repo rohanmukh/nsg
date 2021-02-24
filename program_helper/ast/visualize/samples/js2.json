@@ -1,0 +1,26 @@
+{
+  "javaDoc": null,
+  "body": "public int compareTo(SearcherTracker other){\n  if (recordTimeSec < other.recordTimeSec) {\n    return 1;\n  }\n else   if (other.recordTimeSec < recordTimeSec) {\n    return -1;\n  }\n else {\n    return 0;\n  }\n}\n",
+  "ast": {
+    "node": "DSubTree",
+    "_nodes": [
+      {
+        "node": "DAPICall",
+        "expr_var_id": "system_package",
+        "_call": "java.lang.System.nanoTime()"
+      },
+      {
+        "node": "DAPICall",
+        "expr_var_id": "system_package",
+        "_call": "java.util.concurrent.TimeUnit.toSeconds(long)"
+      }
+    ]
+  },
+  "file": "/home/ubuntu/java_projects/frostwire-desktop/lib/jars-src/lucene-3.5.0/org/apache/lucene/search/SearcherLifetimeManager.java",
+  "className": "SearcherTracker",
+  "returnType": "int",
+  "method": "compareTo@120",
+  "formalParam": [
+    "SearcherTracker"
+  ]
+}

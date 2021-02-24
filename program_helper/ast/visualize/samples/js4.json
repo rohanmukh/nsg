@@ -1,0 +1,36 @@
+{
+  "javaDoc": "Records that you are now using this IndexSearcher. Always call this when you've obtained a possibly new IndexSearcher , for example from one of the <code>get</code> methods in  NRTManager  or  SearcherManager .  It's fine if you already passed the same searcher to this method before. <p>This returns the long token that you can later pass to  acquire  to retrieve the same IndexSearcher. You should record this long token in the search results sent to your user, such that if the user performs a follow-on action (clicks next page, drills down, etc.) the token is returned. ",
+  "body": "/** \n * Records that you are now using this IndexSearcher. Always call this when you've obtained a possibly new {@link IndexSearcher}, for example from one of the <code>get</code> methods in  {@link NRTManager} or {@link SearcherManager}.  It's fine if you already passed the same searcher to this method before. <p>This returns the long token that you can later pass to  {@link #acquire} to retrieve the same IndexSearcher.You should record this long token in the search results sent to your user, such that if the user performs a follow-on action (clicks next page, drills down, etc.) the token is returned. \n */\npublic long record(IndexSearcher searcher) throws IOException {\n  ensureOpen();\n  final long version=searcher.getIndexReader().getVersion();\n  SearcherTracker tracker=searchers.get(version);\n  if (tracker == null) {\n    tracker=new SearcherTracker(searcher);\n    if (searchers.putIfAbsent(version,tracker) != null) {\n      tracker.close();\n    }\n  }\n else   if (tracker.searcher != searcher) {\n    throw new IllegalArgumentException(\"the provided searcher has the same underlying reader version yet the searcher instance differs from before (new=\" + searcher + \" vs old=\"+ tracker.searcher);\n  }\n  return version;\n}\n",
+  "ast": {
+    "node": "DSubTree",
+    "_nodes": [
+      {
+        "node": "DVarCall",
+        "_returns": "java.util.concurrent.ConcurrentHashMap<Tau_K,Tau_V>",
+        "_id": "field_1"
+      },
+      {
+        "node": "DAPICall",
+        "expr_var_id": "field_1",
+        "_call": "java.util.concurrent.ConcurrentHashMap<Tau_K,Tau_V>.ConcurrentHashMap()"
+      },
+      {
+        "node": "DAPICall",
+        "expr_var_id": "field_1",
+        "_call": "java.util.concurrent.ConcurrentHashMap<Tau_K,Tau_V>.get(java.lang.Object)"
+      },
+      {
+        "node": "DAPICall",
+        "expr_var_id": "field_1",
+        "_call": "java.util.concurrent.ConcurrentHashMap<Tau_K,Tau_V>.putIfAbsent(Tau_K,Tau_V)"
+      }
+    ]
+  },
+  "file": "/home/ubuntu/java_projects/frostwire-desktop/lib/jars-src/lucene-3.5.0/org/apache/lucene/search/SearcherLifetimeManager.java",
+  "className": "SearcherLifetimeManager",
+  "returnType": "long",
+  "method": "record@151",
+  "formalParam": [
+    "IndexSearcher"
+  ]
+}
