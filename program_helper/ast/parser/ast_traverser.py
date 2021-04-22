@@ -147,16 +147,16 @@ class AstTraverser:
                         # node_to_synthesised_id[last_sibling] always consist
                         # two nodes.
                         edges.append((sibling_parent - 1, 'CHILD', node_id - 1))
-                        edges.append((sibling_parent, 'NEXTSibling', node_id - 1))
+                        edges.append((last_sibling, 'NEXTSibling', node_id - 1))
                         node_to_inherited_id[sibling_parent - 1] = node_id - 1
                         node_edges['CHILD'] = (sibling_parent - 1, node_id - 1)
-                        node_edges['NEXTSibling'] = (sibling_parent, node_id - 1)
+                        node_edges['NEXTSibling'] = (last_sibling, node_id - 1)
                     else:
                         edges.append((sibling_parent - 1, 'CHILD', node_id))
-                        edges.append((sibling_parent, 'NEXTSibling', node_id))
+                        edges.append((last_sibling, 'NEXTSibling', node_id))
                         node_to_inherited_id[sibling_parent - 1] = node_id
                         node_edges['CHILD'] = (sibling_parent - 1, node_id)
-                        node_edges['NEXTSibling'] = (sibling_parent, node_id)
+                        node_edges['NEXTSibling'] = (last_sibling, node_id)
                     edges.append((node_id, 'PARENT', sibling_parent))
                     node_to_synthesised_id[node_id] = sibling_parent
                     node_edges['PARENT'] = (node_id, sibling_parent)
@@ -176,4 +176,4 @@ class AstTraverser:
         #edge_types = ['INHERITED_TO_SYNTHESISED', 'PARENT', 'CHILD', 'NEXTSibling']
         #total_edge_types = len(edge_types)
         #step_by_edge = [[] for _ in range(total_edge_types)]
-        return eg_schedule
+        return edges, eg_schedule
