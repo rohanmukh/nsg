@@ -40,7 +40,8 @@ class AstReader:
                  var_vocab=None,
                  op_vocab=None,
                  method_vocab=None,
-                 infer=True):
+                 infer=True,
+                 ifgnn2nag=False):
 
         self.ast_parser = AstParser()
         self.ast_checker = AstChecker(
@@ -76,6 +77,15 @@ class AstReader:
 
         self.iattrib = None
         self.all_var_mappers = None
+
+        # GNN2NAG inputs.
+        self.ifgnn2nag = ifgnn2nag
+        self.eg_schedule = None
+        self.gnn2nag_edges = None
+        self.eg_sending_node_ids = None
+        self.eg_msg_target_node_ids = None
+        self.eg_receiving_node_ids = None
+        self.eg_receiving_node_nums = None
         return
 
     def read_while_vocabing(self, program_ast_js, symtab=None, fp_type_head=None, field_head=None, repair_mode=True):
@@ -92,6 +102,20 @@ class AstReader:
             self.ast_checker.check(self.ast_node_graph)
 
         path = AstTraverser.depth_first_search(self.ast_node_graph)
+        if self.ifgnn2nag:
+            path_with_edges= AstTraverser.dfs_travesal_with_edges(
+                self.ast_node_graph)
+            eg_schedule = AstTraverser.brockschmidt_traversal(
+                self.ast_node_graph,
+                path_with_edges[0],
+                path_with_edges[2],
+                path_with_edges[3])
+
+            gnn_info = AstTraverser.calculate_gnn_info(eg_schedule)
+            eg_sending_node_ids = gnn_info[0]
+            eg_msg_target_node_ids = gnn_info[1]
+            eg_receiving_node_ids = gnn_info[2]
+            eg_receiving_node_num = gnn_info[3]
 
         parsed_ast_array = []
         parent_call_val = 0
@@ -161,15 +185,28 @@ class AstReader:
                                          type_helper_val, expr_type_val, ret_type_val,
                                          iattrib))
 
-        return parsed_ast_array, all_var_mappers
+        if self.ifgnn2nag:
+            return_items = (parsed_ast_array, all_var_mappers,
+                            # TODO(ywen666): check which kinds of edges return
+                            path_with_edges[1],
+                            eg_sending_node_ids,
+                            eg_msg_target_node_ids,
+                            eg_receiving_node_ids,
+                            eg_receiving_node_num)
+            return return_items
+        else:
+            return parsed_ast_array, all_var_mappers
 
     # sz is total number of data points, Wrangle Program ASTs into numpy arrays
-    def wrangle(self, ast_programs, all_var_mappers, min_num_data=None):
+    def wrangle(self, ast_programs, all_var_mappers,
+                min_num_data=None, gnn_info=None):
         if min_num_data is None:
             sz = len(ast_programs)
         else:
             sz = max(min_num_data, len(ast_programs))
 
+        # TODO(ywen666): Hard-coding here!
+        gnn_max_depth = 100
         self.nodes = np.zeros((sz, self.max_depth), dtype=np.int32)
         self.edges = np.zeros((sz, self.max_depth), dtype=np.bool)
         self.targets = np.zeros((sz, self.max_depth), dtype=np.int32)
@@ -206,6 +243,8 @@ class AstReader:
 
             self.all_var_mappers[i] = all_var_mappers[i]
 
+        if self.ifgnn2nag:
+            self.gnn_info = gnn_info
         return
 
     def save(self, path):
@@ -217,6 +256,9 @@ class AstReader:
                          self.ret_type_val,  self.all_var_mappers,
                          self.iattrib
                          ], f)
+        if self.ifgnn2nag:
+            with open(path + '/gnn2nag.pickle', 'wb') as f:
+                pickle.dump(self.gnn_info, f)
 
     def load_data(self, path):
         with open(path + '/ast_apis.pickle', 'rb') as f:
@@ -227,6 +269,9 @@ class AstReader:
              self.ret_type_val, self.all_var_mappers,
              self.iattrib
              ] = pickle.load(f)
+
+        with open(path + '/gnn2nag.pickle', 'rb') as f:
+            self.gnn_info = pickle.load(f)
         return
 
     def truncate(self, sz):

@@ -48,7 +48,8 @@ class Reader:
                  infer=False,
                  infer_vocab_path=None,
                  repair_mode=True,
-                 dump_ast=False
+                 dump_ast=False,
+                 ifgnn2nag=False
                  ):
         '''
         :param filename: JSON file to read from
@@ -64,6 +65,7 @@ class Reader:
         conditional_director_creator(dump_data_path)
         self.logger = create_logger(os.path.join(dump_data_path, 'data_read.log'))
         self.logger.info('Reading data file...')
+        self.ifgnn2nag = ifgnn2nag
 
         self.program_reader = ProgramReader(
             max_ast_depth=MAX_AST_DEPTH, max_loop_num=MAX_LOOP_NUM,
@@ -78,7 +80,8 @@ class Reader:
             infer=infer,
             infer_vocab_path=infer_vocab_path,
             logger=self.logger,
-            repair_mode=repair_mode
+            repair_mode=repair_mode,
+            ifgnn2nag=ifgnn2nag
         )
         self.done, self.ignored_for_branch, self.ignored_for_loop, self.ignored_for_try, \
         self.ignored_for_illegal_var_access, self.ignored_for_nested_api, \
@@ -111,13 +114,27 @@ class Reader:
         random.shuffle(self.data_points)
 
         ##
-        ast_programs, all_var_mappers, return_types, formal_params, field_array, \
-        apicalls, types, keywords, \
-        method, classname, javadoc_kws, \
-        surr_ret, surr_fp, surr_method, surr_method_ids, \
-        self.passed_jsons, self.real_javas, self.checker_outcome_strings, self.asts = \
-            zip(*self.data_points)  # unzip
+        if self.ifgnn2nag:
+            ast_programs, all_var_mappers, return_types, formal_params, \
+                field_array, apicalls, types, keywords, \
+                method, classname, javadoc_kws, surr_ret, \
+                surr_fp, surr_method, surr_method_ids, \
+                self.passed_jsons, self.real_javas, \
+                self.checker_outcome_strings, self.asts, gnn_info  = \
+                zip(*self.data_points)  # unzip
+        else:
+            ast_programs, all_var_mappers, return_types, formal_params, \
+                field_array, apicalls, types, keywords, \
+                method, classname, javadoc_kws, surr_ret, \
+                surr_fp, surr_method, surr_method_ids, \
+                self.passed_jsons, self.real_javas, \
+                self.checker_outcome_strings, self.asts = \
+                zip(*self.data_points)  # unzip
 
+        # most programs share the same graph structures
+        #test = gnn_info[0][0]
+        #for item in gnn_info:
+        #    print(test == item[0])
         if self.passed_jsons[0] == None:
             self.passed_jsons = None
         if self.real_javas[0] == None:
@@ -127,10 +144,23 @@ class Reader:
         if self.asts[0] == None:
             self.asts = None
 
-        self.program_reader.wrangle(ast_programs, all_var_mappers, return_types, formal_params, field_array,
-                                    apicalls, types, keywords,
-                                    method, classname, javadoc_kws, surr_ret, surr_fp, surr_method, surr_method_ids,
-                                    min_num_data=min_num_data)
+        if self.ifgnn2nag:
+            self.program_reader.wrangle(ast_programs, all_var_mappers,
+                                        return_types, formal_params,
+                                        field_array, apicalls, types,
+                                        keywords, method, classname,
+                                        javadoc_kws, surr_ret, surr_fp,
+                                        surr_method, surr_method_ids,
+                                        min_num_data=min_num_data,
+                                        gnn_info = gnn_info)
+        else:
+            self.program_reader.wrangle(ast_programs, all_var_mappers,
+                                        return_types, formal_params,
+                                        field_array, apicalls, types,
+                                        keywords, method, classname,
+                                        javadoc_kws, surr_ret, surr_fp,
+                                        surr_method, surr_method_ids,
+                                        min_num_data=min_num_data)
 
     def dump(self):
         java_synthesis, javas_synthesized = Write_Java(rename_vars=True), list()
@@ -158,7 +188,6 @@ class Reader:
                 continue
 
             data_points.append(data_point)
-
             self.done += 1
             if self.done % 1000 == 0 and self.done > 0:
                 self.logger.info('Extracted data for {} programs'.format(self.done))
@@ -172,20 +201,42 @@ class Reader:
         if 'ast' not in program:
             return None
         try:
-            parsed_ast, all_var_mappers, return_type_id, parsed_fp_array, parsed_field_array, \
-            apicalls, types, keywords, \
-            method, classname, javadoc_kws, \
-            surr_ret, surr_fp, surr_method_names, surr_method_ids,\
-            mod_program_js, checker_outcome_string = \
-                self.program_reader.read_json(program)
+            if self.ifgnn2nag:
+                parsed_ast, all_var_mappers, return_type_id, \
+                    parsed_fp_array, parsed_field_array, \
+                    apicalls, types, keywords, \
+                    method, classname, javadoc_kws, \
+                    surr_ret, surr_fp, surr_method_names, surr_method_ids,\
+                    mod_program_js, checker_outcome_string, gnn_info = \
+                    self.program_reader.read_json(program)
+            else:
+                parsed_ast, all_var_mappers, return_type_id, \
+                    parsed_fp_array, parsed_field_array, \
+                    apicalls, types, keywords, \
+                    method, classname, javadoc_kws, \
+                    surr_ret, surr_fp, surr_method_names, surr_method_ids,\
+                    mod_program_js, checker_outcome_string = \
+                    self.program_reader.read_json(program)
 
             program_ast = program['ast'] if self.dump_ast or self.infer else None
             body = program['body'] if self.infer else None
 
-            data_point = (parsed_ast, all_var_mappers, return_type_id, parsed_fp_array, parsed_field_array,
-                                apicalls, types, keywords, method, classname, javadoc_kws,
-                                surr_ret, surr_fp, surr_method_names, surr_method_ids, mod_program_js, body,
-                                checker_outcome_string, program_ast)
+            if self.ifgnn2nag:
+                data_point = (
+                    parsed_ast, all_var_mappers, return_type_id, \
+                    parsed_fp_array, parsed_field_array, \
+                    apicalls, types, keywords, method, classname, \
+                    javadoc_kws, surr_ret, surr_fp, surr_method_names, \
+                    surr_method_ids, mod_program_js, body, \
+                    checker_outcome_string, program_ast, gnn_info)
+            else:
+                data_point = (
+                    parsed_ast, all_var_mappers, return_type_id, \
+                    parsed_fp_array, parsed_field_array, \
+                    apicalls, types, keywords, method, classname, \
+                    javadoc_kws, surr_ret, surr_fp, surr_method_names, \
+                    surr_method_ids, mod_program_js, body, \
+                    checker_outcome_string, program_ast)
 
         except TooLongLoopingException as e1:
             self.ignored_for_loop += 1

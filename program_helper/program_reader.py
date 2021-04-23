@@ -49,7 +49,8 @@ class ProgramReader:
                  infer=False,
                  infer_vocab_path=None,
                  logger=None,
-                 repair_mode=True
+                 repair_mode=True,
+                 ifgnn2nag=False
                  ):
 
         self.vocab = argparse.Namespace()
@@ -59,6 +60,7 @@ class ProgramReader:
 
         self.json_synthesizer = JSON_Synthesis()
         self.java_compiler = JavaCompiler()
+        self.ifgnn2nag = ifgnn2nag
 
         if not self.infer:
             self.concept_vocab = VocabBuildingDictionary()
@@ -97,7 +99,8 @@ class ProgramReader:
             var_vocab=self.var_vocab,
             op_vocab=self.op_vocab,
             method_vocab=self.method_vocab,
-            infer=self.infer
+            infer=self.infer,
+            ifgnn2nag=self.ifgnn2nag
         )
 
         self.ast_checker = AstGenChecker(self.type_vocab, compiler=self.java_compiler, logger=logger)
@@ -157,12 +160,26 @@ class ProgramReader:
         fp_type_head = self.formal_param_reader.form_fp_ast(program_js['formal_params'], self.symtab)
         field_head = self.field_reader.form_ast(program_js['field_ast']['_nodes'], self.symtab)
 
-        parsed_api_array, all_var_mappers = self.ast_reader.read_while_vocabing(program_js['ast'],
-                                                               symtab=self.symtab,
-                                                               fp_type_head=fp_type_head,
-                                                               field_head=field_head,
-                                                               repair_mode=self.repair_mode
-                                                               )
+        if self.ifgnn2nag:
+            return_items = self.ast_reader.read_while_vocabing(
+                program_js['ast'],
+                symtab=self.symtab,
+                fp_type_head=fp_type_head,
+                field_head=field_head,
+                repair_mode=self.repair_mode
+                )
+
+            parsed_api_array = return_items[0]
+            all_var_mappers = return_items[1]
+            gnn_info = path_with_edges = return_items[2:]
+        else:
+            parsed_api_array, all_var_mappers = \
+                self.ast_reader.read_while_vocabing(program_js['ast'],
+                                                    symtab=self.symtab,
+                                                    fp_type_head=fp_type_head,
+                                                    field_head=field_head,
+                                                    repair_mode=self.repair_mode
+                                                    )
 
         if not self.repair_mode:
             for key in self.symtab.keys():
@@ -203,19 +220,27 @@ class ProgramReader:
 
         self.ast_storage_jsons.append(program_js if self.infer else None)
 
-        return parsed_api_array, all_var_mappers, return_type_id, parsed_fp_array, \
-               parsed_field_array, apicalls, types, keywords, \
-               method, classname, javadoc_kws, \
-               surr_ret, surr_fp, surr_method_name, surr_method_ids, \
-               new_program_js, checker_outcome_string
+        if self.ifgnn2nag:
+            return parsed_api_array, all_var_mappers, return_type_id, \
+                parsed_fp_array, parsed_field_array, apicalls, types, \
+                keywords, method, classname, javadoc_kws, \
+                surr_ret, surr_fp, surr_method_name, surr_method_ids, \
+                new_program_js, checker_outcome_string, gnn_info
+        else:
+            return parsed_api_array, all_var_mappers, return_type_id, \
+                parsed_fp_array, parsed_field_array, apicalls, types, \
+                keywords, method, classname, javadoc_kws, \
+                surr_ret, surr_fp, surr_method_name, surr_method_ids, \
+                new_program_js, checker_outcome_string
 
     def wrangle(self, ast_programs, all_var_mappers, return_types, formal_params, field_array,
                 apicalls, types, keywords,
                 method, classname, javadoc_kws,
                 surr_ret, surr_fp, surr_method_names, surr_method_ids,
-                min_num_data=None):
+                min_num_data=None, gnn_info=None):
 
-        self.ast_reader.wrangle(ast_programs, all_var_mappers, min_num_data=min_num_data)
+        self.ast_reader.wrangle(ast_programs, all_var_mappers,
+                                min_num_data=min_num_data, gnn_info=gnn_info)
         self.formal_param_reader.wrangle(formal_params, min_num_data=min_num_data)
         self.field_reader.wrangle(field_array, min_num_data=min_num_data)
         self.return_type_reader.wrangle(return_types, min_num_data=min_num_data)

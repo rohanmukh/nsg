@@ -23,11 +23,13 @@ class Loader:
              max_ast_depth=config.max_ast_depth,
              max_fp_depth=config.input_fp_depth,
              max_keywords=config.max_keywords,
-             data_path=data_path
+             data_path=data_path,
+             ifgnn2nag=self.config.decoder.ifnag
         )
 
         self.program_reader.load_data()
         self.config.vocab = self.program_reader.vocab
+        self.ifgnn2nag = self.config.decoder.ifnag
 
         max_num_batches = int( self.program_reader.get_size() / self.config.batch_size)
         print('Max batches :: {}'.format(max_num_batches))
@@ -47,6 +49,7 @@ class Loader:
             self.type_helper_val, self.expr_type_val, self.ret_type_val, \
                 self.all_var_mappers, self.iattrib \
                     = self.program_reader.ast_reader.get()
+
         self.return_types = self.program_reader.return_type_reader.get()
         self.fp_input = self.program_reader.formal_param_reader.get()
         self.apicalls, self.types, self.keywords,\
