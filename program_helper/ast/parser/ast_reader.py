@@ -318,6 +318,8 @@ class AstReader:
                self.type_helper_val, self.expr_type_val, self.ret_type_val, \
                self.all_var_mappers, self.iattrib
 
+    def get_gnn_info(self):
+        return self.gnn_info
 
     def add_data_from_another_reader(self, ast_reader):
         if self.nodes is None:

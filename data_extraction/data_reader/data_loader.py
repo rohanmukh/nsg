@@ -50,6 +50,9 @@ class Loader:
                 self.all_var_mappers, self.iattrib \
                     = self.program_reader.ast_reader.get()
 
+        if self.ifgnn2nag:
+            self.gnn_info = self.program_reader.ast_reader.get_gnn_info()
+
         self.return_types = self.program_reader.return_type_reader.get()
         self.fp_input = self.program_reader.formal_param_reader.get()
         self.apicalls, self.types, self.keywords,\
@@ -63,39 +66,84 @@ class Loader:
 
 
     def reset_batches(self):
-        self.batches = iter(
-            zip(self.nodes, self.edges, self.targets,
-                self.var_decl_ids, self.return_reached,
-                self.node_type_number,
-                self.type_helper_val, self.expr_type_val, self.ret_type_val,
-                self.all_var_mappers,
-                self.iattrib,
-                self.return_types,
-                self.fp_input,
-                self.field_inputs,
-                self.apicalls, self.types, self.keywords, self.method, self.classname, self.javadoc_kws,
-                self.surr_ret_types, self.surr_fp_types, self.surr_methods))
-        return
+        if self.ifgnn2nag:
+            self.batches = iter(
+                zip(self.nodes, self.edges, self.targets,
+                    self.var_decl_ids, self.return_reached,
+                    self.node_type_number,
+                    self.type_helper_val, self.expr_type_val,
+                    self.ret_type_val,
+                    self.all_var_mappers,
+                    self.iattrib,
+                    self.return_types,
+                    self.fp_input,
+                    self.field_inputs,
+                    self.apicalls, self.types, self.keywords,
+                    self.method, self.classname, self.javadoc_kws,
+                    self.surr_ret_types, self.surr_fp_types,
+                    self.surr_methods,
+                    self.gnn_info))
+        else:
+            self.batches = iter(
+                zip(self.nodes, self.edges, self.targets,
+                    self.var_decl_ids, self.return_reached,
+                    self.node_type_number,
+                    self.type_helper_val, self.expr_type_val,
+                    self.ret_type_val,
+                    self.all_var_mappers,
+                    self.iattrib,
+                    self.return_types,
+                    self.fp_input,
+                    self.field_inputs,
+                    self.apicalls, self.types, self.keywords,
+                    self.method, self.classname, self.javadoc_kws,
+                    self.surr_ret_types, self.surr_fp_types,
+                    self.surr_methods))
+            return
 
     def next_batch(self):
-        n, e, t, \
-        var_decls, ret_reached, \
-        node_type_number,\
-        thv, etv, ncv, \
-        all_var_mappers, \
-        iattrib, \
-        rt, \
-        fp_in, \
-        fields,\
-        apis, types, kws, mn, cn, jkw, s_rt, s_fp, s_m = next(self.batches)
-        return n, e, t, \
-               var_decls, ret_reached, \
-               node_type_number,\
-               thv, etv, ncv, \
-               all_var_mappers, \
-               iattrib, \
-               rt, \
-               fp_in,\
-               fields,\
-               apis, types, kws, mn, cn, jkw, \
-               s_rt, s_fp, s_m
+        if self.gnn2nag:
+            n, e, t, \
+            var_decls, ret_reached, \
+            node_type_number,\
+            thv, etv, ncv, \
+            all_var_mappers, \
+            iattrib, \
+            rt, \
+            fp_in, \
+            fields,\
+            apis, types, kws, mn, cn, jkw, s_rt, s_fp, s_m, \
+            gnn_info = next(self.batches)
+            return n, e, t, \
+                var_decls, ret_reached, \
+                node_type_number,\
+                thv, etv, ncv, \
+                all_var_mappers, \
+                iattrib, \
+                rt, \
+                fp_in,\
+                fields,\
+                apis, types, kws, mn, cn, jkw, \
+                s_rt, s_fp, s_m, gnn_info
+        else:
+            n, e, t, \
+            var_decls, ret_reached, \
+            node_type_number,\
+            thv, etv, ncv, \
+            all_var_mappers, \
+            iattrib, \
+            rt, \
+            fp_in, \
+            fields,\
+            apis, types, kws, mn, cn, jkw, s_rt, s_fp, s_m = next(self.batches)
+            return n, e, t, \
+                var_decls, ret_reached, \
+                node_type_number,\
+                thv, etv, ncv, \
+                all_var_mappers, \
+                iattrib, \
+                rt, \
+                fp_in,\
+                fields,\
+                apis, types, kws, mn, cn, jkw, \
+                s_rt, s_fp, s_m
