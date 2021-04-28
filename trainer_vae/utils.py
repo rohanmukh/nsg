@@ -22,7 +22,7 @@ CONFIG_GENERAL = ['batch_size', 'num_epochs', 'latent_size',
                   'max_keywords', 'max_variables', 'max_fields', 'max_camel_case',
                   'trunct_num_batch', 'print_step', 'checkpoint_step', ]
 CONFIG_ENCODER = ['units', 'num_layers']
-CONFIG_DECODER = ['units', 'num_layers']
+CONFIG_DECODER = ['units', 'num_layers', 'ifnag']
 
 
 

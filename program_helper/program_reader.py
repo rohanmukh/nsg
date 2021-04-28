@@ -33,9 +33,6 @@ from utilities.basics import dump_java, dump_json
 from trainer_vae.utils import read_config
 
 
-
-
-
 class ProgramReader:
 
     def __init__(self, max_ast_depth=32, max_loop_num=3,
@@ -171,7 +168,7 @@ class ProgramReader:
 
             parsed_api_array = return_items[0]
             all_var_mappers = return_items[1]
-            gnn_info = path_with_edges = return_items[2:]
+            gnn_info = return_items[2]
         else:
             parsed_api_array, all_var_mappers = \
                 self.ast_reader.read_while_vocabing(program_js['ast'],
@@ -304,7 +301,7 @@ class ProgramReader:
         self.return_type_reader.truncate(sz)
         self.surrounding_reader.truncate(sz)
 
-    def split(self, num_batches):
+    def split(self, num_batches, batch_size=128):
 
         self.ast_reader.split(num_batches)
         self.formal_param_reader.split(num_batches)
@@ -312,7 +309,6 @@ class ProgramReader:
         self.keyword_reader.split(num_batches)
         self.return_type_reader.split(num_batches)
         self.surrounding_reader.split(num_batches)
-
         return
 
     def load_dictionary(self, vocab_path):

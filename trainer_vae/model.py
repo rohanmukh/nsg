@@ -19,6 +19,11 @@ from tensorflow.contrib import seq2seq
 from synthesis.ops.candidate_ast import TYPE_NODE, VAR_NODE, API_NODE, SYMTAB_MOD, OP_NODE, CONCEPT_NODE, METHOD_NODE, \
     CLSTYPE_NODE, VAR_DECL_NODE
 
+#EXPANSION_LABELED_EDGE_TYPE_NAMES = ["Child"]
+#EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Parent", "NextUse", "NextToken", "NextSibling", "NextSubtree",
+EXPANSION_LABELED_EDGE_TYPE_NAMES = []
+EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Child", "Parent", "NextSibling",
+                                       "InheritedToSynthesised"]
 
 class Model:
     def __init__(self, config, top_k=5):
@@ -106,6 +111,63 @@ class Model:
                                    self.return_type,
                                    self.encoder.program_encoder.surr_enc.internal_method_embedding,
                                    self.initial_state)
+
+        if self.config.decoder.ifnag:
+            self.hyperparameters = \
+                self.decoder.program_decoder.ast_tree.hyperparameters
+            self.gnn_placeholders = {}
+            eg_edge_type_num = len(EXPANSION_LABELED_EDGE_TYPE_NAMES) + len(
+                EXPANSION_UNLABELED_EDGE_TYPE_NAMES)
+            # Initial nodes I: Node IDs that will have no (active) incoming edges.
+            self.gnn_placeholders['eg_initial_node_ids'] = \
+                tf.placeholder(dtype=tf.int32,
+                               shape=[None],
+                               name="eg_initial_node_ids")
+
+            # Sending nodes S_{s,e}: Source node ids of edges of type e
+            # propagating in step s. Restrictions: If v in S_{s,e}, then
+            # v in R_{s'} for s' < s or v in I.
+            self.gnn_placeholders['eg_sending_node_ids'] = \
+                [[tf.placeholder(dtype=tf.int32,
+                                shape=[None],
+                                name="eg_sending_node_ids_step%i_edgetyp%i" % (
+                                    step, edge_typ))
+                for edge_typ in range(eg_edge_type_num)]
+                for step in range(
+                    self.hyperparameters['eg_propagation_substeps'])]
+
+            # Normalised edge target nodes T_{s}: Targets of edges propagating
+            # in step s, normalised to a continuous range starting from 0.
+            # This is used for aggregating messages from the sending nodes.
+            self.gnn_placeholders['eg_msg_target_node_ids'] = \
+                [tf.placeholder(dtype=tf.int32,
+                                shape=[None],
+                                name="eg_msg_targets_nodes_step%i" % (step,))
+                for step in range(
+                    self.hyperparameters['eg_propagation_substeps'])]
+
+            # Receiving nodes R_{s}: Target node ids of aggregated messages
+            # in propagation step s. Restrictions: If v in R_{s}, v not in
+            # R_{s'} for all s' != s and v not in I
+            self.gnn_placeholders['eg_receiving_node_ids'] = \
+                [tf.placeholder(dtype=tf.int32,
+                                shape=[None],
+                                name="eg_receiving_nodes_step%i" % (step,))
+                for step in range(
+                    self.hyperparameters['eg_propagation_substeps'])]
+
+            # Number of receiving nodes N_{s}
+            # Restrictions: N_{s} = len(R_{s})
+            self.gnn_placeholders['eg_receiving_node_nums'] = \
+                tf.placeholder(
+                    dtype=tf.int32,
+                    shape=[self.hyperparameters['eg_propagation_substeps']],
+                    name="eg_receiving_nodes_nums")
+
+            self.gnn_placeholders['eg_production_nodes'] = \
+                tf.placeholder(dtype=tf.int32,
+                               shape=[None],
+                               name="eg_production_nodes")
 
         def get_loss(id, node_type):
             weights = tf.ones_like(self.targets, dtype=tf.float32) \

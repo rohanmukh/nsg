@@ -51,7 +51,8 @@ class Loader:
                     = self.program_reader.ast_reader.get()
 
         if self.ifgnn2nag:
-            self.gnn_info = self.program_reader.ast_reader.get_gnn_info()
+            # Dump last batch
+            self.gnn_info = self.program_reader.ast_reader.get_gnn_info()[:-1]
 
         self.return_types = self.program_reader.return_type_reader.get()
         self.fp_input = self.program_reader.formal_param_reader.get()
@@ -102,7 +103,7 @@ class Loader:
             return
 
     def next_batch(self):
-        if self.gnn2nag:
+        if self.ifgnn2nag:
             n, e, t, \
             var_decls, ret_reached, \
             node_type_number,\

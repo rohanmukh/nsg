@@ -132,9 +132,13 @@ class Reader:
                 zip(*self.data_points)  # unzip
 
         # most programs share the same graph structures
+        # Print the edges here
+        #import pdb; pdb.set_trace()
         #test = gnn_info[0][0]
         #for item in gnn_info:
         #    print(test == item[0])
+        #import pdb; pdb.set_trace()
+
         if self.passed_jsons[0] == None:
             self.passed_jsons = None
         if self.real_javas[0] == None:

@@ -13,6 +13,7 @@
 # limitations under the License.
 import tensorflow as tf
 from program_helper.ast.tf_model.tree_decoder import TreeDecoder
+from program_helper.ast.tf_model.nagdecoder import NAGDecoder
 from program_helper.sequence.sequence_decoder import SequenceDecoder
 from program_helper.element.dense_decoder import DenseDecoder
 
@@ -31,22 +32,43 @@ class ProgramDecoder:
         self.concept_emb = tf.get_variable('emb_concept', [config.vocab.concept_dict_size, config.decoder.units])
 
         with tf.variable_scope("ast_tree"):
-            self.ast_tree = TreeDecoder(nodes, edges, var_decl_ids, ret_reached,
-                                        iattrib, all_var_mappers,
-                                        type_helper_val,
-                                        expr_type_val, ret_type_val,
-                                        node_type_number,
-                                        ret_type, fp_inputs, field_inputs,
-                                        initial_state,
-                                        method_embedding,
-                                        config.decoder.num_layers, config.decoder.units, config.batch_size,
-                                        config.vocab.api_dict_size,
-                                        config.vocab.type_dict_size,
-                                        config.vocab.var_dict_size,
-                                        config.vocab.concept_dict_size,
-                                        config.vocab.op_dict_size,
-                                        config.vocab.method_dict_size,
-                                        self.type_emb,
-                                        self.concept_emb,
-                                        max_variables=config.max_variables,
-                                        )
+            if config.decoder.ifnag:
+                self.ast_tree = NAGDecoder(nodes, edges, var_decl_ids, ret_reached,
+                                           iattrib, all_var_mappers,
+                                           type_helper_val,
+                                           expr_type_val, ret_type_val,
+                                           node_type_number,
+                                           ret_type, fp_inputs, field_inputs,
+                                           initial_state,
+                                           method_embedding,
+                                           config.decoder.num_layers, config.decoder.units, config.batch_size,
+                                           config.vocab.api_dict_size,
+                                           config.vocab.type_dict_size,
+                                           config.vocab.var_dict_size,
+                                           config.vocab.concept_dict_size,
+                                           config.vocab.op_dict_size,
+                                           config.vocab.method_dict_size,
+                                           self.type_emb,
+                                           self.concept_emb,
+                                           max_variables=config.max_variables,
+                                           )
+            else:
+                self.ast_tree = TreeDecoder(nodes, edges, var_decl_ids, ret_reached,
+                                            iattrib, all_var_mappers,
+                                            type_helper_val,
+                                            expr_type_val, ret_type_val,
+                                            node_type_number,
+                                            ret_type, fp_inputs, field_inputs,
+                                            initial_state,
+                                            method_embedding,
+                                            config.decoder.num_layers, config.decoder.units, config.batch_size,
+                                            config.vocab.api_dict_size,
+                                            config.vocab.type_dict_size,
+                                            config.vocab.var_dict_size,
+                                            config.vocab.concept_dict_size,
+                                            config.vocab.op_dict_size,
+                                            config.vocab.method_dict_size,
+                                            self.type_emb,
+                                            self.concept_emb,
+                                            max_variables=config.max_variables,
+                                            )

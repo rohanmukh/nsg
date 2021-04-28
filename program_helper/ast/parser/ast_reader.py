@@ -105,17 +105,20 @@ class AstReader:
         if self.ifgnn2nag:
             path_with_edges= AstTraverser.dfs_travesal_with_edges(
                 self.ast_node_graph)
-            eg_schedule = AstTraverser.brockschmidt_traversal(
+            gnn_info = AstTraverser.brockschmidt_traversal(
                 self.ast_node_graph,
                 path_with_edges[0],
                 path_with_edges[2],
                 path_with_edges[3])
 
-            gnn_info = AstTraverser.calculate_gnn_info(eg_schedule)
-            eg_sending_node_ids = gnn_info[0]
-            eg_msg_target_node_ids = gnn_info[1]
-            eg_receiving_node_ids = gnn_info[2]
-            eg_receiving_node_num = gnn_info[3]
+            #gnn_results = AstTraverser.calculate_gnn_info(eg_schedule)
+            #gnn_info = {
+            #    'edge_info': path_with_edges[1],
+            #    'eg_sending_node_ids': gnn_results[0],
+            #    'eg_msg_target_node_ids': gnn_results[1],
+            #    'eg_receiving_node_ids': gnn_results[2],
+            #    'eg_receiving_node_num': gnn_results[3]
+            #}
 
         parsed_ast_array = []
         parent_call_val = 0
@@ -188,11 +191,7 @@ class AstReader:
         if self.ifgnn2nag:
             return_items = (parsed_ast_array, all_var_mappers,
                             # TODO(ywen666): check which kinds of edges return
-                            path_with_edges[1],
-                            eg_sending_node_ids,
-                            eg_msg_target_node_ids,
-                            eg_receiving_node_ids,
-                            eg_receiving_node_num)
+                            gnn_info)
             return return_items
         else:
             return parsed_ast_array, all_var_mappers
@@ -292,7 +291,7 @@ class AstReader:
         self.iattrib = self.iattrib[:sz]
         return
 
-    def split(self, num_batches):
+    def split(self, num_batches, batch_size=128):
         # split into batches
         self.nodes = np.split(self.nodes, num_batches, axis=0)
         self.edges = np.split(self.edges, num_batches, axis=0)
@@ -309,6 +308,10 @@ class AstReader:
 
         self.all_var_mappers = np.split(np.array(self.all_var_mappers), num_batches, axis=0)
         self.iattrib = np.split(np.array(self.iattrib), num_batches, axis=0)
+
+        if self.ifgnn2nag:
+            self.gnn_info = [self.gnn_info[i:i + batch_size]
+                             for i in range(0, len(self.gnn_info), batch_size)]
         return
 
     def get(self):

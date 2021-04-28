@@ -29,6 +29,7 @@
     },
     "decoder": {
         "units": 256,
-        "num_layers": 1
+        "num_layers": 2,
+        "ifnag": true
     }
 }

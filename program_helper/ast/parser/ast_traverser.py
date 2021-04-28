@@ -225,9 +225,10 @@ class AstTraverser:
         return eg_schedule
 
 
+    # TODO(ywen666): Need to move out of here.
     def calculate_gnn_info(eg_schedule):
         total_edge_types = len(EXPANSION_UNLABELED_EDGE_TYPE_NAMES)
-        eg_propagation_substeps = 80
+        eg_propagation_substeps = 100
         eg_initial_node_ids = []
         eg_sending_node_ids = [[[] for _ in range(
             total_edge_types)] for _ in range(eg_propagation_substeps)]
