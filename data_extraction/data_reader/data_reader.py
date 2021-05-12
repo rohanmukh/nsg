@@ -67,8 +67,14 @@ class Reader:
         self.logger.info('Reading data file...')
         self.ifgnn2nag = ifgnn2nag
 
+        #TODO(ywen666): Hard code number of gnn nodes.
+        if ifgnn2nag:
+            max_depth = 85
+        else:
+            max_depth = MAX_AST_DEPTH
+
         self.program_reader = ProgramReader(
-            max_ast_depth=MAX_AST_DEPTH, max_loop_num=MAX_LOOP_NUM,
+            max_ast_depth=max_depth, max_loop_num=MAX_LOOP_NUM,
             max_branching_num=MAX_BRANCHING_NUM,
             max_fp_depth=MAX_FP_DEPTH,
             max_camel=MAX_CAMELCASE,
@@ -186,8 +192,13 @@ class Reader:
 
     def read_data_from_array(self, prog_array, max_num_data=None):
         data_points = []
+        error = 0
         for program in prog_array:
-            data_point = self.read_one_json_program(program)
+            try:
+                data_point = self.read_one_json_program(program)
+            except:
+                data_point = None
+                error += 1
             if data_point is None:
                 continue
 
@@ -198,6 +209,7 @@ class Reader:
             if max_num_data is not None and self.done >= max_num_data:
                 break
         self.logger.info('Extracted data for {} programs'.format(self.done))
+        self.logger.info('{} programs have errors'.format(error))
         return data_points
 
     def read_one_json_program(self, program):

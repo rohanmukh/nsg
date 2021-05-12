@@ -23,10 +23,12 @@ VARIABLE_NONTERMINAL = 'Variable'
 LITERAL_NONTERMINALS = ['IntLiteral', 'CharLiteral', 'StringLiteral']
 LAST_USED_TOKEN_NAME = '<LAST TOK>'
 #EXPANSION_LABELED_EDGE_TYPE_NAMES = ["Child"]
+EXPANSION_LABELED_EDGE_TYPE_NAMES = []
 #EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Child", "Parent", "NextUse", "NextToken", "NextSibling", "NextSubtree",
 #                                       "InheritedToSynthesised"]
 EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Child", "Parent", "NextSibling",
-                                       "InheritedToSynthesised"]
+                                       "InheritedToSynthesised",
+                                       "NextToken", "NextUse"]
 
 expansion_unlabeled_edge_types = OrderedDict(
         (name, edge_id) for (edge_id, name) in enumerate(
@@ -77,8 +79,9 @@ class AstTraverser:
         # "Upwards" version of a node (depends on children). Keys are IDs from symbol expansion record:
         node_to_synthesised_id = {}  # type: Dict[int, int]
         node_to_info = {}
-        # Maps variable name to the id of the node where it was last used. Keys are variable names, values are from fresh space next to symbol expansion record:
-        last_used_node_id = {}  # type: Dict[str, int]
+        buffer = []
+        last_used_var_id = {}  # type: Dict[str, [int]]
+        last_terminal_node_id = -1
 
         stack = []
         node_id = 0
@@ -91,22 +94,46 @@ class AstTraverser:
             node_edges = {}
             node, last_sibling, edge_type = stack.pop()
 
-            node_info = (
+            node_info = [
                 node.val, node.type, node.valid,
                 node.var_decl_id, node.return_reached,
                 last_sibling, edge_type,
                 node.expr_type, node.type_helper, node.return_type,
-                node.iattrib, node_id)
-            node_to_info[node_id] = node_info
+                node.iattrib]
+            node_to_info[node_id] = tuple(node_info)
             setattr(node, 'node_id', [node_id])
 
             # Split the node into inherited node and synthesised node.
             if node.child is not None:
+                node_name = node.val + '_inherited'
+                nodes.append(node_name)
+                node_info[0] = node_name
+                buffer.append(tuple(node_info))
                 node_id += 1
                 node_to_info[node_id] = node_info
                 edges.append((node_id - 1, 'InheritedToSynthesised', node_id))
                 node_edges['InheritedToSynthesised'] = (node_id - 1, node_id)
                 node.node_id.append(node_id)
+                node_name = node.val + '_synthesized'
+                node_info[0] = node_name
+                nodes.append(node_name)
+                buffer.append(tuple(node_info))
+            else:
+                nodes.append(node.val)
+                buffer.append(tuple(node_info))
+                if last_terminal_node_id != -1:
+                    edges.append((last_terminal_node_id, 'NextToken', node_id))
+                    last_terminal_node_id = node_id
+                else:
+                    last_terminal_node_id = node_id
+                if node.type == 'DVarAccess' or node.type == 'DVarAccessDecl':
+                    if node.val in last_used_var_id:
+                        edges.append((last_used_var_id[node.val][-1],
+                                     "NextUse",
+                                     node_id))
+                        last_used_var_id[node.val].append(node_id)
+                    else:
+                        last_used_var_id[node.val] = [node_id]
 
             if node_id > 1:
                 if edge_type:
@@ -174,7 +201,8 @@ class AstTraverser:
         #edge_types = ['INHERITED_TO_SYNTHESISED', 'PARENT', 'CHILD', 'NEXTSibling']
         #total_edge_types = len(edge_types)
         #step_by_edge = [[] for _ in range(total_edge_types)]
-        return edges, eg_schedule, node_to_inherited_id, node_to_synthesised_id
+        return edges, eg_schedule, node_to_inherited_id,\
+            node_to_synthesised_id, nodes, buffer
 
 
     def brockschmidt_traversal(head, edges, node_to_inherited_id,
@@ -215,7 +243,8 @@ class AstTraverser:
         expand_node(0)
 
         def split_schedult_step(step):
-            total_edge_types = 4
+            total_edge_types = len(EXPANSION_LABELED_EDGE_TYPE_NAMES) + len(
+                EXPANSION_UNLABELED_EDGE_TYPE_NAMES)
             step_by_edge = [[] for _ in range(total_edge_types)]
             for (label, edges) in step.items():
                 step_by_edge[expansion_unlabeled_edge_types[label]] = edges

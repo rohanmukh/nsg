@@ -69,6 +69,10 @@ class ProgramReader:
             self.kw_vocab = VocabBuildingDictionary()
             self.op_vocab = VocabBuildingDictionary()
             self.method_vocab = VocabBuildingDictionary()
+            if self.ifgnn2nag:
+                self.gnn_node_vocab = VocabBuildingDictionary()
+            else:
+                self.gnn_node_vocab = None
         else:
             self.load_dictionary_from_config(infer_vocab_path)
             compiler_path = infer_vocab_path.replace('/config.json', '')
@@ -83,6 +87,11 @@ class ProgramReader:
             self.kw_vocab = VocabBuildingDictionary(self.vocab.kw_dict)
             self.op_vocab = VocabBuildingDictionary(self.vocab.op_dict)
             self.method_vocab = VocabBuildingDictionary(self.vocab.method_dict)
+            if self.ifgnn2nag:
+                self.gnn_node_vocab = VocabBuildingDictionary(
+                    self.vocab.gnn_node_dict)
+            else:
+                self.gnn_node_vocab = None
 
         self.ast_reader = AstReader(
             max_depth=max_ast_depth,
@@ -96,6 +105,7 @@ class ProgramReader:
             var_vocab=self.var_vocab,
             op_vocab=self.op_vocab,
             method_vocab=self.method_vocab,
+            gnn_node_vocab=self.gnn_node_vocab,
             infer=self.infer,
             ifgnn2nag=self.ifgnn2nag
         )
@@ -303,7 +313,7 @@ class ProgramReader:
 
     def split(self, num_batches, batch_size=128):
 
-        self.ast_reader.split(num_batches)
+        self.ast_reader.split(num_batches, batch_size)
         self.formal_param_reader.split(num_batches)
         self.field_reader.split(num_batches)
         self.keyword_reader.split(num_batches)
@@ -333,6 +343,9 @@ class ProgramReader:
         self.vocab.op_dict, self.vocab.op_dict_size = self.op_vocab.get_dictionary()
         self.vocab.method_dict, self.vocab.method_dict_size = self.method_vocab.get_dictionary()
         self.vocab.kw_dict, self.vocab.kw_dict_size = self.kw_vocab.get_dictionary()
+        if self.ifgnn2nag:
+            self.vocab.gnn_node_dict, self.vocab.gnn_node_size = \
+                self.gnn_node_vocab.get_dictionary()
         dump_json(dump_vocab(self.vocab), os.path.join(data_path + '/vocab.json'))
         return
 
@@ -362,3 +375,4 @@ class ProgramReader:
         self.kw_vocab = deepcopy(program_reader.kw_vocab)
         self.op_vocab = deepcopy(program_reader.op_vocab)
         self.method_vocab = deepcopy(program_reader.method_vocab)
+        self.gnn_node_vocab = deepcopy(program_reader.gnn_node_vocab)

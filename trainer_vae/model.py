@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections import defaultdict, Counter, OrderedDict, namedtuple, deque
+from typing import List, Dict, Any, Tuple, Iterable, Set, Optional
+
 import numpy as np
 import tensorflow as tf
 
@@ -18,15 +21,19 @@ from trainer_vae.architecture import Encoder, Decoder
 from tensorflow.contrib import seq2seq
 from synthesis.ops.candidate_ast import TYPE_NODE, VAR_NODE, API_NODE, SYMTAB_MOD, OP_NODE, CONCEPT_NODE, METHOD_NODE, \
     CLSTYPE_NODE, VAR_DECL_NODE
+#from dpu_utils.tfmodels import AsyncGGNN
+from gnn import AsyncGGNN
+from trainer_vae.utils import construct_minibatch
 
 #EXPANSION_LABELED_EDGE_TYPE_NAMES = ["Child"]
 #EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Parent", "NextUse", "NextToken", "NextSibling", "NextSubtree",
 EXPANSION_LABELED_EDGE_TYPE_NAMES = []
 EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Child", "Parent", "NextSibling",
-                                       "InheritedToSynthesised"]
+                                       "InheritedToSynthesised",
+                                       "NextToken", "NextUse"]
 
 class Model:
-    def __init__(self, config, top_k=5):
+    def __init__(self, config, top_k=5, gnn_node_vocab=None):
         self.config = config
 
         self.nodes = tf.placeholder(tf.int32, [self.config.batch_size, self.config.max_ast_depth])
@@ -99,27 +106,31 @@ class Model:
                                                           + tf.square(-self.encoder.output_mean)
                                                           , axis=1), axis=0)
 
-        with tf.variable_scope("decoder"):
-            latent_state_lifted = tf.layers.dense(self.latent_state, config.decoder.units)
-            self.initial_state = [latent_state_lifted] * config.decoder.num_layers
-            self.decoder = Decoder(config, nodes, edges,
-                                   var_decl_ids, ret_reached, iattrib,
-                                   self.all_var_mappers,
-                                   type_helper_val, expr_type_val, ret_type_val,
-                                   node_type_number,
-                                   formal_param_inputs, field_inputs,
-                                   self.return_type,
-                                   self.encoder.program_encoder.surr_enc.internal_method_embedding,
-                                   self.initial_state)
-
         if self.config.decoder.ifnag:
-            self.hyperparameters = \
-                self.decoder.program_decoder.ast_tree.hyperparameters
-            self.gnn_placeholders = {}
+            self.parameters = {}
+            _ = self.get_decoder_default_hyperparameters()
+            #self.hyperparameters = \
+            #    self.decoder.program_decoder.ast_tree.hyperparameters
+
+            self.gnn_node_vocab = gnn_node_vocab
+            eg_token_vocab_size = len(gnn_node_vocab)
+            eg_hidden_size = self.hyperparameters['eg_hidden_size']
+
+            self.parameters['eg_token_embeddings'] = \
+                tf.get_variable(name='eg_token_embeddings',
+                                shape=[eg_token_vocab_size, eg_hidden_size],
+                                initializer=tf.random_normal_initializer(),
+                                )
+
+            self.placeholders = {}
             eg_edge_type_num = len(EXPANSION_LABELED_EDGE_TYPE_NAMES) + len(
                 EXPANSION_UNLABELED_EDGE_TYPE_NAMES)
+            self.placeholders['eg_node_token_ids'] = tf.placeholder(
+                tf.int32,
+                [None],
+                name="eg_node_token_ids")
             # Initial nodes I: Node IDs that will have no (active) incoming edges.
-            self.gnn_placeholders['eg_initial_node_ids'] = \
+            self.placeholders['eg_initial_node_ids'] = \
                 tf.placeholder(dtype=tf.int32,
                                shape=[None],
                                name="eg_initial_node_ids")
@@ -127,7 +138,7 @@ class Model:
             # Sending nodes S_{s,e}: Source node ids of edges of type e
             # propagating in step s. Restrictions: If v in S_{s,e}, then
             # v in R_{s'} for s' < s or v in I.
-            self.gnn_placeholders['eg_sending_node_ids'] = \
+            self.placeholders['eg_sending_node_ids'] = \
                 [[tf.placeholder(dtype=tf.int32,
                                 shape=[None],
                                 name="eg_sending_node_ids_step%i_edgetyp%i" % (
@@ -139,7 +150,7 @@ class Model:
             # Normalised edge target nodes T_{s}: Targets of edges propagating
             # in step s, normalised to a continuous range starting from 0.
             # This is used for aggregating messages from the sending nodes.
-            self.gnn_placeholders['eg_msg_target_node_ids'] = \
+            self.placeholders['eg_msg_target_node_ids'] = \
                 [tf.placeholder(dtype=tf.int32,
                                 shape=[None],
                                 name="eg_msg_targets_nodes_step%i" % (step,))
@@ -149,7 +160,7 @@ class Model:
             # Receiving nodes R_{s}: Target node ids of aggregated messages
             # in propagation step s. Restrictions: If v in R_{s}, v not in
             # R_{s'} for all s' != s and v not in I
-            self.gnn_placeholders['eg_receiving_node_ids'] = \
+            self.placeholders['eg_receiving_node_ids'] = \
                 [tf.placeholder(dtype=tf.int32,
                                 shape=[None],
                                 name="eg_receiving_nodes_step%i" % (step,))
@@ -158,16 +169,81 @@ class Model:
 
             # Number of receiving nodes N_{s}
             # Restrictions: N_{s} = len(R_{s})
-            self.gnn_placeholders['eg_receiving_node_nums'] = \
+            self.placeholders['eg_receiving_node_nums'] = \
                 tf.placeholder(
                     dtype=tf.int32,
                     shape=[self.hyperparameters['eg_propagation_substeps']],
                     name="eg_receiving_nodes_nums")
 
-            self.gnn_placeholders['eg_production_nodes'] = \
-                tf.placeholder(dtype=tf.int32,
-                               shape=[None],
-                               name="eg_production_nodes")
+            # We don't use context graph representation for now.
+            eg_initial_node_representations = \
+                tf.nn.embedding_lookup(
+                    self.parameters['eg_token_embeddings'],
+                    self.placeholders['eg_node_token_ids'])
+            eg_hypers = {name.replace("eg_", "", 1): value
+                        for (name, value) in self.hyperparameters.items()
+                        if name.startswith("eg_")}
+            eg_hypers['propagation_rounds'] = 1
+            # We don't have labelled edge for now.
+            eg_hypers['num_labeled_edge_types'] = len(
+                EXPANSION_LABELED_EDGE_TYPE_NAMES)
+            eg_hypers['num_unlabeled_edge_types'] = len(
+                EXPANSION_UNLABELED_EDGE_TYPE_NAMES)
+
+            with tf.variable_scope("ExpansionGraph"):
+                eg_model = AsyncGGNN(eg_hypers)
+                self.eg_node_representations = tf.identity(
+                    eg_initial_node_representations)
+
+                # Note that we only use a single async schedule here,
+                # so every argument is wrapped in
+                # [] to use the generic code supporting many schedules:
+                self.eg_node_representations = \
+                    eg_model.async_ggnn_layer(
+                        eg_initial_node_representations,
+                        [self.placeholders['eg_initial_node_ids']],
+                        [self.placeholders['eg_sending_node_ids']],
+                        [self.placeholders['eg_initial_node_ids']],
+                        #[self.__embed_edge_labels(
+                        #    self.hyperparameters['eg_propagation_substeps'])],
+                        [self.placeholders['eg_msg_target_node_ids']],
+                        [self.placeholders['eg_receiving_node_ids']],
+                        [self.placeholders['eg_receiving_node_nums']])
+
+                self.eg_node_representations = tf.reshape(
+                    self.eg_node_representations,
+                    [-1, self.config.max_ast_depth, eg_hidden_size])
+                self.gnn_inputs = tf.unstack(tf.transpose(
+                    self.eg_node_representations, [1, 0, 2]), axis=0)
+                self.rnn_input = tf.transpose(self.eg_node_representations, [1, 0, 2])
+
+        with tf.variable_scope("decoder"):
+            latent_state_lifted = tf.layers.dense(self.latent_state, config.decoder.units)
+            self.initial_state = [latent_state_lifted] * config.decoder.num_layers
+            if self.config.decoder.ifnag:
+                self.decoder = Decoder(
+                    config, nodes, edges,
+                    var_decl_ids, ret_reached, iattrib,
+                    self.all_var_mappers,
+                    type_helper_val, expr_type_val, ret_type_val,
+                    node_type_number,
+                    formal_param_inputs, field_inputs,
+                    self.return_type,
+                    self.encoder.program_encoder.surr_enc.internal_method_embedding,
+                    self.initial_state,
+                    gnn_inputs = self.gnn_inputs)
+            else:
+                self.decoder = Decoder(
+                    config, nodes, edges,
+                    var_decl_ids, ret_reached, iattrib,
+                    self.all_var_mappers,
+                    type_helper_val, expr_type_val, ret_type_val,
+                    node_type_number,
+                    formal_param_inputs, field_inputs,
+                    self.return_type,
+                    self.encoder.program_encoder.surr_enc.internal_method_embedding,
+                    self.initial_state)
+
 
         def get_loss(id, node_type):
             weights = tf.ones_like(self.targets, dtype=tf.float32) \
@@ -404,7 +480,8 @@ class Model:
                           return_type, formal_param_inputs,
                           fields, method, classname, javadoc_kws,
                           surr_ret, surr_fp, surr_method,
-                          visibility=1.00
+                          visibility=1.00,
+                          gnn_info=None
                           ):
         def calculate_mean_prob(matrix, targets, node_type_number, node_type):
             matrix_choices = np.argmax(matrix, axis=2)
@@ -437,18 +514,19 @@ class Model:
         feed.update({self.type_helper_val: type_helper_val, self.expr_type_val: expr_type_val,
                      self.ret_type_val: ret_type_val})
 
+        gnn_minibatch, gnn_batch_data = construct_minibatch(gnn_info, self)
+        feed.update(gnn_minibatch)
+
         concept_matrix, api_matrix, type_matrix, \
-        clstype_matrix, var_matrix, op_matrix, \
+        clstype_matrix, var_matrix, vardecl_matrix, op_matrix, \
         method_matrix, _ = sess.run(self.decoder.ast_logits, feed)
-
-
 
         concept_mean_prob = calculate_mean_prob(concept_matrix, targets, node_type_number, CONCEPT_NODE)
         api_mean_prob = calculate_mean_prob(api_matrix,  targets, node_type_number, API_NODE)
         type_mean_prob = calculate_mean_prob(type_matrix,  targets, node_type_number, TYPE_NODE)
         clstype_mean_prob = calculate_mean_prob(clstype_matrix,  targets, node_type_number, CLSTYPE_NODE)
         var_mean_prob = calculate_mean_prob(var_matrix,  targets, node_type_number, VAR_NODE)
-        vardecl_mean_prob = calculate_mean_prob(var_matrix,  targets, node_type_number, VAR_DECL_NODE)
+        vardecl_mean_prob = calculate_mean_prob(vardecl_matrix,  targets, node_type_number, VAR_DECL_NODE)
         op_mean_prob = calculate_mean_prob(op_matrix,  targets, node_type_number, OP_NODE)
         method_mean_prob = calculate_mean_prob(method_matrix,   targets, node_type_number, METHOD_NODE)
 
@@ -491,3 +569,79 @@ class Model:
                     'non_critical_vars': non_critical_vars
                     }
         return var_dict[input]
+
+    def get_default_hyperparameters(self) -> Dict[str, Any]:
+        return {
+                'optimizer': 'Adam',
+                'seed': 0,
+                'dropout_keep_rate': 0.9,
+                'learning_rate': 0.00025,
+                'learning_rate_decay': 0.98,
+                'momentum': 0.85,
+                'gradient_clip': 1,
+                'max_epochs': 500,
+                'patience': 5,
+               }
+
+    def get_decoder_default_hyperparameters(self) -> Dict[str, Any]:
+        decoder_defaults = {
+                    'eg_token_vocab_size': 100,
+                    'eg_literal_vocab_size': 10,
+                    'eg_max_variable_choices': 10,
+                    #'eg_propagation_substeps': 100,
+                    'eg_propagation_substeps': 85,
+                    'eg_hidden_size': 64,
+                    #'eg_edge_label_size': 16,
+                    'eg_edge_label_size': 0,
+                    'exclude_edge_types': [],
+
+                    'eg_graph_rnn_cell': 'GRU',  # GRU or RNN
+                    'eg_graph_rnn_activation': 'tanh',  # tanh, ReLU
+
+                    'eg_use_edge_bias': False,
+
+                    'eg_use_vars_for_production_choice': True,  # Use mean-pooled variable representation as input for production choice
+                    'eg_update_last_variable_use_representation': True,
+
+                    'eg_use_literal_copying': True,
+                    'eg_use_context_attention': True,
+                    'eg_max_context_tokens': 500,
+                   }
+
+        cg_defaults = self.get_default_hyperparameters_context_graph()
+        defaults = self.get_default_hyperparameters()
+        decoder_defaults.update(cg_defaults)
+        decoder_defaults.update(defaults)
+        self.hyperparameters = decoder_defaults
+        return decoder_defaults
+
+    def get_default_hyperparameters_context_graph(self) -> Dict[str, Any]:
+        my_defaults = {
+                        'max_num_cg_nodes_in_batch': 100000,
+
+                        # Context Program Graph things:
+                        'excluded_cg_edge_types': [],
+                        'cg_add_subtoken_nodes': True,
+
+                        'cg_node_label_embedding_style': 'Token',  # One of ['Token', 'CharCNN']
+                        'cg_node_label_vocab_size': 10000,
+                        'cg_node_label_char_length': 16,
+                        "cg_node_label_embedding_size": 32,
+
+                        'cg_node_type_vocab_size': 5000,
+                        'cg_node_type_max_num': 10,
+                        'cg_node_type_embedding_size': 32,
+
+                        "cg_ggnn_layer_timesteps": [3, 1, 3, 1],
+                        "cg_ggnn_residual_connections": {"1": [0], "3": [0, 1]},
+
+                        "cg_ggnn_hidden_size": 64,
+                        "cg_ggnn_use_edge_bias": False,
+                        "cg_ggnn_use_edge_msg_avg_aggregation": False,
+                        "cg_ggnn_use_propagation_attention": False,
+                        "cg_ggnn_graph_rnn_activation": "tanh",
+                        "cg_ggnn_graph_rnn_cell": "GRU",
+
+                     }
+        return my_defaults
+

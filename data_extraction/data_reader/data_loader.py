@@ -41,7 +41,8 @@ class Loader:
         sz = self.config.num_batches * self.config.batch_size
 
         self.program_reader.truncate(sz)
-        self.program_reader.split(self.config.num_batches)
+        self.program_reader.split(self.config.num_batches,
+                                  batch_size=self.config.batch_size)
 
         self.nodes, self.edges, self.targets, \
             self.var_decl_ids, self.return_reached,\

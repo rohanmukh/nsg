@@ -40,6 +40,7 @@ class AstReader:
                  var_vocab=None,
                  op_vocab=None,
                  method_vocab=None,
+                 gnn_node_vocab=None,
                  infer=True,
                  ifgnn2nag=False):
 
@@ -61,6 +62,7 @@ class AstReader:
         self.var_vocab = var_vocab
         self.op_vocab = op_vocab
         self.method_vocab = method_vocab
+        self.gnn_node_vocab = gnn_node_vocab
 
         self.nodes = None
         self.edges = None
@@ -101,15 +103,19 @@ class AstReader:
         if repair_mode:
             self.ast_checker.check(self.ast_node_graph)
 
-        path = AstTraverser.depth_first_search(self.ast_node_graph)
         if self.ifgnn2nag:
+            #path = AstTraverser.depth_first_search(self.ast_node_graph)
             path_with_edges= AstTraverser.dfs_travesal_with_edges(
                 self.ast_node_graph)
-            gnn_info = AstTraverser.brockschmidt_traversal(
+            eg_schedule = AstTraverser.brockschmidt_traversal(
                 self.ast_node_graph,
                 path_with_edges[0],
                 path_with_edges[2],
                 path_with_edges[3])
+            gnn_info = {}
+            gnn_info['eg_schedule'] = eg_schedule
+            gnn_info['node_labels'] = path_with_edges[-2]
+            path = path_with_edges[-1]
 
             #gnn_results = AstTraverser.calculate_gnn_info(eg_schedule)
             #gnn_info = {
@@ -119,9 +125,12 @@ class AstReader:
             #    'eg_receiving_node_ids': gnn_results[2],
             #    'eg_receiving_node_num': gnn_results[3]
             #}
+        else:
+            path = AstTraverser.depth_first_search(self.ast_node_graph)
 
         parsed_ast_array = []
         parent_call_val = 0
+        node_ids = []
         for i, (curr_node_val, curr_node_type, curr_node_validity,
                 curr_node_var_decl_ids, curr_node_return_reached,
                 parent_node_id,
@@ -189,6 +198,12 @@ class AstReader:
                                          iattrib))
 
         if self.ifgnn2nag:
+            for node_label in gnn_info['node_labels']:
+                gnn_value = \
+                    self.gnn_node_vocab.conditional_add_or_get_node_val(
+                        node_label, self.infer)
+                node_ids.append(gnn_value)
+            gnn_info['node_ids'] = node_ids
             return_items = (parsed_ast_array, all_var_mappers,
                             # TODO(ywen666): check which kinds of edges return
                             gnn_info)
@@ -204,8 +219,6 @@ class AstReader:
         else:
             sz = max(min_num_data, len(ast_programs))
 
-        # TODO(ywen666): Hard-coding here!
-        gnn_max_depth = 100
         self.nodes = np.zeros((sz, self.max_depth), dtype=np.int32)
         self.edges = np.zeros((sz, self.max_depth), dtype=np.bool)
         self.targets = np.zeros((sz, self.max_depth), dtype=np.int32)
@@ -243,6 +256,12 @@ class AstReader:
             self.all_var_mappers[i] = all_var_mappers[i]
 
         if self.ifgnn2nag:
+            for i, item in enumerate(gnn_info):
+                node_ids = np.zeros((self.max_depth), dtype=np.int32)
+                len_path = min(len(item['node_ids']), self.max_depth)
+                temp_node_ids = item['node_ids'][:len_path]
+                node_ids[:len_path] = temp_node_ids
+                gnn_info[i]['node_ids'] = node_ids
             self.gnn_info = gnn_info
         return
 
@@ -269,8 +288,9 @@ class AstReader:
              self.iattrib
              ] = pickle.load(f)
 
-        with open(path + '/gnn2nag.pickle', 'rb') as f:
-            self.gnn_info = pickle.load(f)
+        if self.ifgnn2nag:
+            with open(path + '/gnn2nag.pickle', 'rb') as f:
+                self.gnn_info = pickle.load(f)
         return
 
     def truncate(self, sz):
@@ -348,6 +368,9 @@ class AstReader:
             self.iattrib = ast_reader.iattrib
             self.all_var_mappers = ast_reader.all_var_mappers
 
+            if self.ifgnn2nag:
+                self.gnn_info = ast_reader.gnn_info
+
         else:
             self.nodes = np.append(self.nodes, ast_reader.nodes, axis=0)
             self.edges = np.append(self.edges, ast_reader.edges, axis=0)
@@ -365,3 +388,5 @@ class AstReader:
             self.iattrib = np.append(self.iattrib, ast_reader.iattrib, axis=0)
             self.all_var_mappers = np.append(self.all_var_mappers, ast_reader.all_var_mappers, axis=0)
 
+            if self.ifgnn2nag:
+                self.gnn_info = ast_reader.gnn_info

@@ -27,7 +27,8 @@ class ProgramDecoder:
                  expr_type_val, ret_type_val,
                  node_type_number,
                  fp_inputs, field_inputs,
-                 ret_type, method_embedding, initial_state):
+                 ret_type, method_embedding, initial_state,
+                 gnn_inputs=None):
         self.type_emb = tf.get_variable('emb_type', [config.vocab.type_dict_size, config.decoder.units])
         self.concept_emb = tf.get_variable('emb_concept', [config.vocab.concept_dict_size, config.decoder.units])
 
@@ -51,6 +52,7 @@ class ProgramDecoder:
                                            self.type_emb,
                                            self.concept_emb,
                                            max_variables=config.max_variables,
+                                           gnn_inputs=gnn_inputs
                                            )
             else:
                 self.ast_tree = TreeDecoder(nodes, edges, var_decl_ids, ret_reached,

@@ -46,7 +46,13 @@ class BayesianPredictor(object):
 
         self.config.trunct_num_batch = None
 
-        self.model = Model(self.config, top_k=batch_size)
+        if self.config.decoder.ifnag:
+            self.model = Model(
+                self.config,
+                top_k=batch_size,
+                gnn_node_vocab=self.config.vocab.gnn_node_dict)
+        else:
+            self.model = Model(self.config, top_k=batch_size)
 
         self.sess = tf.Session()
         self.restore(save_dir)
@@ -131,13 +137,24 @@ class BayesianPredictor(object):
         return psi, all_var_mappers, method_embedding
 
     def get_api_prob_from_next_batch(self, loader_batch, visibility=1.00):
-        nodes, edges, targets, var_decl_ids, ret_reached, \
-        node_type_number, \
-        type_helper_val, expr_type_val, ret_type_val, \
-        all_var_mappers, iattrib, \
-        ret_type, fp_in, fields, \
-        apis, types, kws, method, classname, javadoc_kws, \
-        surr_ret, surr_fp, surr_method = loader_batch
+
+        if self.config.decoder.ifnag:
+            nodes, edges, targets, var_decl_ids, ret_reached, \
+            node_type_number, \
+            type_helper_val, expr_type_val, ret_type_val, \
+            all_var_mappers, iattrib, \
+            ret_type, fp_in, fields, \
+            apis, types, kws, method, classname, javadoc_kws, \
+            surr_ret, surr_fp, surr_method, gnn_info = loader_batch
+        else:
+            nodes, edges, targets, var_decl_ids, ret_reached, \
+            node_type_number, \
+            type_helper_val, expr_type_val, ret_type_val, \
+            all_var_mappers, iattrib, \
+            ret_type, fp_in, fields, \
+            apis, types, kws, method, classname, javadoc_kws, \
+            surr_ret, surr_fp, surr_method = loader_batch
+            gnn_info = None
 
         [concept_prob, api_prob, type_prob, clstype_prob, var_prob, vardecl_prob, op_prob, method_prob] \
                                     = self.model.get_decoder_probs(self.sess,
@@ -147,7 +164,8 @@ class BayesianPredictor(object):
                                                 all_var_mappers, iattrib, \
                                                 apis, types, kws,
                                                 ret_type, fp_in, fields, method, classname, javadoc_kws,
-                                                surr_ret, surr_fp, surr_method, visibility=visibility
+                                                surr_ret, surr_fp, surr_method, visibility=visibility,
+                                                gnn_info=gnn_info
                                                 )
 
         return concept_prob, api_prob, type_prob, clstype_prob, var_prob, vardecl_prob, op_prob, method_prob
