@@ -67,9 +67,9 @@ class Reader:
         self.logger.info('Reading data file...')
         self.ifgnn2nag = ifgnn2nag
 
-        #TODO(ywen666): Hard code number of gnn nodes.
+        # TODO(ywen666): Hard code number of gnn nodes.
         if ifgnn2nag:
-            max_depth = 85
+            max_depth = 128
         else:
             max_depth = MAX_AST_DEPTH
 

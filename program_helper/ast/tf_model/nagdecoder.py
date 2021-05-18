@@ -410,14 +410,17 @@ class NAGDecoder(BaseTreeEncoding):
 
         with tf.variable_scope('method_prediction'):
             internal_method_embedding_flat = tf.reshape(internal_method_embedding, (self.batch_size, -1))
+            #input = tf.concat([tf.nn.embedding_lookup(self.concept_emb, node),
+            #                   internal_method_embedding_flat,
+            #                   flat_varflag,
+            #                   flat_nullptr_varflag_in,
+            #                   ret_reached,
+            #                   tf.nn.embedding_lookup(self.type_emb, type_helper_val),
+            #                   gnn_node
+            #                ], axis=1)
             input = tf.concat([tf.nn.embedding_lookup(self.concept_emb, node),
-                               #internal_method_embedding_flat,
-                               #flat_varflag,
-                               #flat_nullptr_varflag_in,
-                               #ret_reached,
-                               tf.nn.embedding_lookup(self.type_emb, type_helper_val),
                                gnn_node
-                            ], axis=1)
+                               ], axis=1)
             method_output, method_state = self.method_encoder.get_next_output_with_symtab(input, state_in)
             method_logit = self.method_encoder.get_projection(method_output)
 
@@ -427,9 +430,9 @@ class NAGDecoder(BaseTreeEncoding):
             #                    flat_nullptr_varflag_in,
             #                    tf.nn.embedding_lookup(self.type_emb, type_helper_val),
             #                    ], axis=1)
-            input1 = tf.concat(
-                [tf.nn.embedding_lookup(self.type_emb, type_helper_val),
-                 gnn_node], axis=1)
+            input1 = tf.concat([tf.nn.embedding_lookup(self.concept_emb, node),
+                               gnn_node
+                               ], axis=1)
             input1 = tf.layers.dense(input1, self.units, activation=tf.nn.tanh)
             input1 = tf.layers.dense(input1, self.units, activation=tf.nn.tanh)
             var_output1, var_state1 = self.var_encoder1.get_next_output_with_symtab(input1, state_in)
@@ -440,9 +443,9 @@ class NAGDecoder(BaseTreeEncoding):
             #                    flat_nullptr_varflag_in,
             #                    tf.nn.embedding_lookup(self.type_emb, expr_type_val),
             #                    ], axis=1)
-            input2 = tf.concat(
-                [tf.nn.embedding_lookup(self.type_emb, expr_type_val),
-                 gnn_node], axis=1)
+            input2 = tf.concat([tf.nn.embedding_lookup(self.concept_emb, node),
+                               gnn_node
+                               ], axis=1)
             input2 = tf.layers.dense(input2, self.units, activation=tf.nn.tanh)
             input2 = tf.layers.dense(input2, self.units, activation=tf.nn.tanh)
             var_output2, var_state2 = self.var_encoder2.get_next_output_with_symtab(input2, state_in)
@@ -453,18 +456,21 @@ class NAGDecoder(BaseTreeEncoding):
             #                    flat_nullptr_varflag_in,
             #                    tf.nn.embedding_lookup(self.type_emb, ret_type_val),
             #                    ], axis=1)
-            input3 = tf.concat(
-                [tf.nn.embedding_lookup(self.type_emb, ret_type_val),
-                 gnn_node], axis=1)
+            input3 = tf.concat([tf.nn.embedding_lookup(self.concept_emb, node),
+                               gnn_node
+                               ], axis=1)
             input3 = tf.layers.dense(input3, self.units, activation=tf.nn.tanh)
             input3 = tf.layers.dense(input3, self.units, activation=tf.nn.tanh)
             var_output3, var_state3 = self.var_encoder3.get_next_output_with_symtab(input3, state_in)
 
         with tf.variable_scope('var_declaration'):
-            input4 = tf.concat([flat_symtab,
-                                flat_varflag,
-                                flat_nullptr_varflag_in,
-                                ], axis=1)
+            #input4 = tf.concat([flat_symtab,
+            #                    flat_varflag,
+            #                    flat_nullptr_varflag_in,
+            #                    ], axis=1)
+            input4 = tf.concat([tf.nn.embedding_lookup(self.concept_emb, node),
+                               gnn_node
+                               ], axis=1)
             input4 = tf.layers.dense(input4, self.units, activation=tf.nn.tanh)
             input4 = tf.layers.dense(input4, self.units, activation=tf.nn.tanh)
             vardecl_output, vardecl_state = self.var_encoder4.get_next_output_with_symtab(input4, state_in)

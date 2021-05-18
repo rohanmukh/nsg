@@ -85,41 +85,54 @@ class AstTraverser:
 
         stack = []
         node_id = 0
-        stack.append((head, node_id, CHILD_EDGE))
+        dfs_id = 0
+        stack.append((head, node_id, dfs_id, CHILD_EDGE))
         nodes = []
         edges = []
         eg_schedule = []
 
         while len(stack) > 0:
             node_edges = {}
-            node, last_sibling, edge_type = stack.pop()
+            node, last_sibling, parent_id, edge_type = stack.pop()
 
             node_info = [
                 node.val, node.type, node.valid,
                 node.var_decl_id, node.return_reached,
-                last_sibling, edge_type,
+                parent_id, edge_type,
                 node.expr_type, node.type_helper, node.return_type,
                 node.iattrib]
             node_to_info[node_id] = tuple(node_info)
             setattr(node, 'node_id', [node_id])
 
+
+            #if node.type == 'DSymtabMod':
+            #    print(node_id)
+            #    print(node_info)
+
             # Split the node into inherited node and synthesised node.
             if node.child is not None:
-                node_name = node.val + '_inherited'
+                node_name = str(node.val) + '_inherited'
+                #node_name = str(node.type) + '_inherited'
                 nodes.append(node_name)
-                node_info[0] = node_name
-                buffer.append(tuple(node_info))
+                #node_info[0] = node_name
+                #buffer.append(tuple(node_info))
                 node_id += 1
                 node_to_info[node_id] = node_info
                 edges.append((node_id - 1, 'InheritedToSynthesised', node_id))
                 node_edges['InheritedToSynthesised'] = (node_id - 1, node_id)
                 node.node_id.append(node_id)
-                node_name = node.val + '_synthesized'
-                node_info[0] = node_name
+
+                node_name = str(node.val) + '_synthesized'
+                #node_name = str(node.type) + '_synthesized'
+                #node_info[0] = node_name
                 nodes.append(node_name)
                 buffer.append(tuple(node_info))
             else:
-                nodes.append(node.val)
+                node_name = str(node.val) + '_inherited'
+                #node_name = str(node.type) + '_inherited'
+                #node_name = node.type
+                nodes.append(node_name)
+
                 buffer.append(tuple(node_info))
                 if last_terminal_node_id != -1:
                     edges.append((last_terminal_node_id, 'NextToken', node_id))
@@ -135,10 +148,16 @@ class AstTraverser:
                     else:
                         last_used_var_id[node.val] = [node_id]
 
+                # Change here.
+                node_id += 1
+
+                node_name = str(node.val) + '_synthesized'
+                #node_name = str(node.type) + '_synthesized'
+                nodes.append(node_name)
+
             if node_id > 1:
                 if edge_type:
                     if node.child is not None:
-                        # Need more thinking
                         edges.append((node_id - 3, 'Child', node_id - 1))
                         edges.append((node_id, 'Parent', node_id - 2))
                         node_edges['Child'] = (node_id - 3, node_id - 1)
@@ -149,17 +168,38 @@ class AstTraverser:
                             node_to_inherited_id[node_id - 3] = [node_id - 1]
                         node_to_synthesised_id[node_id] = node_id - 2
                     else:
-                        edges.append((node_id - 2, 'Child', node_id))
-                        edges.append((node_id, 'Parent', node_id - 1))
-                        node_edges['Child'] = (node_id - 2, node_id)
-                        node_edges['Parent'] = (node_id, node_id - 1)
-                        #node_to_inherited_id[node_id - 2] = node_id
-                        node_to_synthesised_id[node_id] = node_id - 1
-                        if (node_id - 2) in node_to_inherited_id.keys():
-                            node_to_inherited_id[node_id - 2].append(node_id)
+                        edges.append((node_id - 3, 'Child', node_id - 1))
+                        edges.append((node_id - 1, 'Parent', node_id - 2))
+                        node_edges['Child'] = (node_id - 3, node_id - 1)
+                        node_edges['Parent'] = (node_id - 1, node_id - 2)
+                        if (node_id - 3) in node_to_inherited_id.keys():
+                            node_to_inherited_id[node_id - 3].append(node_id - 1)
                         else:
-                            node_to_inherited_id[node_id - 2] = [node_id]
-                        node_to_synthesised_id[node_id] = node_id - 1
+                            node_to_inherited_id[node_id - 3] = [node_id - 1]
+                        node_to_synthesised_id[node_id - 1] = node_id - 2
+                    #if node.child is not None:
+                    #    # Need more thinking
+                    #    edges.append((node_id - 3, 'Child', node_id - 1))
+                    #    edges.append((node_id, 'Parent', node_id - 2))
+                    #    node_edges['Child'] = (node_id - 3, node_id - 1)
+                    #    node_edges['Parent'] = (node_id, node_id - 2)
+                    #    if (node_id - 3) in node_to_inherited_id.keys():
+                    #        node_to_inherited_id[node_id - 3].append(node_id - 1)
+                    #    else:
+                    #        node_to_inherited_id[node_id - 3] = [node_id - 1]
+                    #    node_to_synthesised_id[node_id] = node_id - 2
+                    #else:
+                    #    edges.append((node_id - 2, 'Child', node_id))
+                    #    edges.append((node_id, 'Parent', node_id - 1))
+                    #    node_edges['Child'] = (node_id - 2, node_id)
+                    #    node_edges['Parent'] = (node_id, node_id - 1)
+                    #    #node_to_inherited_id[node_id - 2] = node_id
+                    #    node_to_synthesised_id[node_id] = node_id - 1
+                    #    if (node_id - 2) in node_to_inherited_id.keys():
+                    #        node_to_inherited_id[node_id - 2].append(node_id)
+                    #    else:
+                    #        node_to_inherited_id[node_id - 2] = [node_id]
+                    #    node_to_synthesised_id[node_id] = node_id - 1
                 else:
                     sibling_parent = node_to_synthesised_id[last_sibling]
                     if node.child is not None:
@@ -173,28 +213,57 @@ class AstTraverser:
                             node_to_inherited_id[sibling_parent - 1].append(node_id - 1)
                         else:
                             node_to_inherited_id[sibling_parent - 1] = [node_id - 1]
+
+
+                        edges.append((node_id, 'Parent', sibling_parent))
+                        node_edges['Parent'] = (node_id, sibling_parent)
+                        node_to_synthesised_id[node_id] = sibling_parent
                     else:
-                        edges.append((sibling_parent - 1, 'Child', node_id))
-                        edges.append((last_sibling, 'NextSibling', node_id))
-                        node_edges['Child'] = (sibling_parent - 1, node_id)
-                        node_edges['NextSibling'] = (last_sibling, node_id)
+                        edges.append((sibling_parent - 1, 'Child', node_id - 1))
+                        edges.append((last_sibling, 'NextSibling', node_id - 1))
+                        node_edges['Child'] = (sibling_parent - 1, node_id - 1)
+                        node_edges['NextSibling'] = (last_sibling, node_id - 1)
                         if (sibling_parent - 1) in node_to_inherited_id.keys():
-                            node_to_inherited_id[sibling_parent - 1].append(node_id)
+                            node_to_inherited_id[sibling_parent - 1].append(node_id - 1)
                         else:
-                            node_to_inherited_id[sibling_parent - 1] = [node_id]
-                    edges.append((node_id, 'Parent', sibling_parent))
-                    node_edges['Parent'] = (node_id, sibling_parent)
-                    node_to_synthesised_id[node_id] = sibling_parent
+                            node_to_inherited_id[sibling_parent - 1] = [node_id - 1]
+                    #if node.child is not None:
+                    #    # node_to_synthesised_id[last_sibling] always consist
+                    #    # two nodes.
+                    #    edges.append((sibling_parent - 1, 'Child', node_id - 1))
+                    #    edges.append((last_sibling, 'NextSibling', node_id - 1))
+                    #    node_edges['Child'] = (sibling_parent - 1, node_id - 1)
+                    #    node_edges['NextSibling'] = (last_sibling, node_id - 1)
+                    #    if (sibling_parent - 1) in node_to_inherited_id.keys():
+                    #        node_to_inherited_id[sibling_parent - 1].append(node_id - 1)
+                    #    else:
+                    #        node_to_inherited_id[sibling_parent - 1] = [node_id - 1]
+                    #else:
+                    #    edges.append((sibling_parent - 1, 'Child', node_id))
+                    #    edges.append((last_sibling, 'NextSibling', node_id))
+                    #    node_edges['Child'] = (sibling_parent - 1, node_id)
+                    #    node_edges['NextSibling'] = (last_sibling, node_id)
+                    #    if (sibling_parent - 1) in node_to_inherited_id.keys():
+                    #        node_to_inherited_id[sibling_parent - 1].append(node_id)
+                    #    else:
+                    #        node_to_inherited_id[sibling_parent - 1] = [node_id]
+                        edges.append((node_id - 1, 'Parent', sibling_parent))
+                        node_edges['Parent'] = (node_id - 1, sibling_parent)
+                        node_to_synthesised_id[node_id - 1] = sibling_parent
 
             eg_schedule.append(node_edges)
             if node.sibling is not None:
-                stack.append((node.sibling, node_id, SIBLING_EDGE))
+                if node.child is not None:
+                    stack.append((node.sibling, node_id, dfs_id, SIBLING_EDGE))
+                else:
+                    stack.append((node.sibling, node_id - 1, dfs_id, SIBLING_EDGE))
             else:
                 last_sibling = None
             if node.child is not None:
-                stack.append((node.child, node_id, CHILD_EDGE))
+                stack.append((node.child, node_id, dfs_id, CHILD_EDGE))
 
             node_id += 1
+            dfs_id += 1
 
         #results = [node_to_info, node_to_inherited_id, node_to_synthesised_id, edges]
 

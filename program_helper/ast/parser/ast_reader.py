@@ -105,7 +105,7 @@ class AstReader:
 
         if self.ifgnn2nag:
             #path = AstTraverser.depth_first_search(self.ast_node_graph)
-            path_with_edges= AstTraverser.dfs_travesal_with_edges(
+            path_with_edges = AstTraverser.dfs_travesal_with_edges(
                 self.ast_node_graph)
             eg_schedule = AstTraverser.brockschmidt_traversal(
                 self.ast_node_graph,
@@ -330,8 +330,14 @@ class AstReader:
         self.iattrib = np.split(np.array(self.iattrib), num_batches, axis=0)
 
         if self.ifgnn2nag:
-            self.gnn_info = [self.gnn_info[i:i + batch_size]
-                             for i in range(0, len(self.gnn_info), batch_size)]
+            if batch_size < len(self.gnn_info):
+                self.gnn_info = [self.gnn_info[i:i + batch_size]
+                                for i in range(0, len(self.gnn_info), batch_size)].copy()
+                # Dump the last batch.
+                self.gnn_info = self.gnn_info[:-1]
+            else:
+                self.gnn_info = [self.gnn_info].copy()
+
         return
 
     def get(self):

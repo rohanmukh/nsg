@@ -25,7 +25,8 @@ CONFIG_VOCAB = ['concept_dict', 'concept_dict_size',
                 'var_dict', 'var_dict_size',
                 'kw_dict', 'kw_dict_size',
                 'op_dict', 'op_dict_size',
-                'method_dict', 'method_dict_size'
+                'method_dict', 'method_dict_size',
+                'gnn_node_dict', 'gnn_node_size',
                 ]
 
 
@@ -33,14 +34,20 @@ CONFIG_VOCAB = ['concept_dict', 'concept_dict_size',
 def dump_vocab(vocab):
     js = {}
     for attr in CONFIG_VOCAB:
-        js[attr] = vocab.__getattribute__(attr)
+        try:
+            js[attr] = vocab.__getattribute__(attr)
+        except:
+            continue
     return js
 
 
 def read_vocab(js):
     vocab = argparse.Namespace()
     for attr in CONFIG_VOCAB:
-        vocab.__setattr__(attr, js[attr])
+        try:
+            vocab.__setattr__(attr, js[attr])
+        except:
+            continue
 
     chars_concept = dict()
     for item, value in vocab.concept_dict.items():

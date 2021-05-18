@@ -89,13 +89,15 @@ class BayesianPredictor(object):
                           return_type, formal_param_inputs,
                           fields, method, classname, javadoc_kws,
                           surr_ret, surr_fp, surr_method,
-                          visibility=1.00
+                          visibility=1.00,
+                          gnn_info=None
                           ):
         state, method_embedding = self.model.get_initial_state(self.sess, apis, types, kws,
                                                                return_type, formal_param_inputs,
                                                                fields, method, classname, javadoc_kws,
                                                                surr_ret, surr_fp, surr_method,
-                                                               visibility=visibility
+                                                               visibility=visibility,
+                                                               gnn_info=gnn_info
                                                                )
         return state, method_embedding
 
@@ -112,26 +114,46 @@ class BayesianPredictor(object):
         return symtab
 
     def get_next_ast_state(self, ast_node, ast_edge, ast_state,
-                           candies):
-        ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs = \
+                           candies, gnn_info=None):
+        ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs, \
+            new_data = \
             self.model.get_next_ast_state(self.sess, ast_node, ast_edge,
                                           ast_state,
-                                          candies)
+                                          candies, gnn_info)
 
-        return ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs
+        return ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs, new_data
+
+    def get_next_ast_state_with_gnn(self, ast_node, ast_edge, ast_state,
+                                    candies, gnn_info=None, input_data=None):
+        ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs, \
+            new_data = self.model.get_next_ast_state_with_gnn(
+                self.sess, ast_node, ast_edge, ast_state,
+                candies, gnn_info, input_data)
+
+        return ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs, new_data
 
     def get_initial_state_from_next_batch(self, loader_batch, visibility=1.00):
-        nodes, edges, targets, var_decl_ids, ret_reached, \
-        node_type_number, \
-        type_helper_val, expr_type_val, ret_type_val, \
-        all_var_mappers, iattrib, \
-        ret_type, fp_in, fields, \
-        apis, types, kws, method, classname, javadoc_kws, \
-        surr_ret, surr_fp, surr_method = loader_batch
+        if self.config.decoder.ifnag:
+            nodes, edges, targets, var_decl_ids, ret_reached, \
+            node_type_number, \
+            type_helper_val, expr_type_val, ret_type_val, \
+            all_var_mappers, iattrib, \
+            ret_type, fp_in, fields, \
+            apis, types, kws, method, classname, javadoc_kws, \
+            surr_ret, surr_fp, surr_method, gnn_info = loader_batch
+        else:
+            nodes, edges, targets, var_decl_ids, ret_reached, \
+            node_type_number, \
+            type_helper_val, expr_type_val, ret_type_val, \
+            all_var_mappers, iattrib, \
+            ret_type, fp_in, fields, \
+            apis, types, kws, method, classname, javadoc_kws, \
+            surr_ret, surr_fp, surr_method = loader_batch
+            gnn_info = None
 
         psi, method_embedding = self.get_initial_state(apis, types, kws,
                                                        ret_type, fp_in, fields, method, classname, javadoc_kws,
-                                                       surr_ret, surr_fp, surr_method, visibility
+                                                       surr_ret, surr_fp, surr_method, visibility, gnn_info
                                                        )
 
         return psi, all_var_mappers, method_embedding
@@ -157,15 +179,16 @@ class BayesianPredictor(object):
             gnn_info = None
 
         [concept_prob, api_prob, type_prob, clstype_prob, var_prob, vardecl_prob, op_prob, method_prob] \
-                                    = self.model.get_decoder_probs(self.sess,
-                                                nodes, edges, targets, var_decl_ids, ret_reached, \
-                                                node_type_number, \
-                                                type_helper_val, expr_type_val, ret_type_val, \
-                                                all_var_mappers, iattrib, \
-                                                apis, types, kws,
-                                                ret_type, fp_in, fields, method, classname, javadoc_kws,
-                                                surr_ret, surr_fp, surr_method, visibility=visibility,
-                                                gnn_info=gnn_info
-                                                )
+                                    = self.model.get_decoder_probs(
+                                        self.sess,
+                                        nodes, edges, targets, var_decl_ids, ret_reached, \
+                                        node_type_number, \
+                                        type_helper_val, expr_type_val, ret_type_val, \
+                                        all_var_mappers, iattrib[:, :self.config.max_ast_depth, :], \
+                                        apis, types, kws,
+                                        ret_type, fp_in, fields, method, classname, javadoc_kws,
+                                        surr_ret, surr_fp, surr_method, visibility=visibility,
+                                        gnn_info=gnn_info
+                                        )
 
         return concept_prob, api_prob, type_prob, clstype_prob, var_prob, vardecl_prob, op_prob, method_prob

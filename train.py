@@ -88,6 +88,7 @@ def train(clargs):
             avg_gen_loss_type, avg_gen_loss_clstype, avg_ast_gen_loss_var, \
             avg_ast_gen_loss_vardecl, avg_ast_gen_loss_method = 0., 0., 0., 0., 0., 0., 0.
 
+            error = 0
             for b in range(config.num_batches):
                 if config.decoder.ifnag:
                     nodes, edges, targets, var_decl_ids, ret_reached,\
@@ -120,7 +121,7 @@ def train(clargs):
                 feed_dict.update({model.nodes: nodes, model.edges: edges, model.targets: targets})
                 feed_dict.update({model.var_decl_ids: var_decl_ids,
                                   model.ret_reached: ret_reached,
-                                  model.iattrib: iattrib,
+                                  model.iattrib: iattrib[:,:config.max_ast_depth,:],
                                   model.all_var_mappers: all_var_mappers})
                 feed_dict.update({model.node_type_number: node_type_number})
                 feed_dict.update({model.type_helper_val: type_helper_val, model.expr_type_val: expr_type_val,
@@ -147,18 +148,31 @@ def train(clargs):
                 if config.decoder.ifnag:
                     gnn_minibatch, gnn_batch_data = construct_minibatch(gnn_info, model)
                     feed_dict.update(gnn_minibatch)
+                    feed_dict.update({model.placeholders['gnn_test']: False})
+
+                #import pdb; pdb.set_trace()
+                #tt = sess.run([model.eg_node_representations], feed_dict)
+                #import pdb; pdb.set_trace()
 
                 # run the optimizer
-                loss, ast_loss, \
-                ast_gen_loss_concept, ast_gen_loss_api, \
-                ast_gen_loss_type, ast_gen_loss_clstype, ast_gen_loss_var, \
-                ast_gen_loss_vardecl, ast_gen_loss_method, \
-                kl_loss, _, sigma = \
-                    sess.run([model.loss, model.ast_gen_loss,
-                              model.ast_gen_loss_concept, model.ast_gen_loss_api,
-                              model.ast_gen_loss_type, model.ast_gen_loss_clstype,
-                              model.ast_gen_loss_var, model.ast_gen_loss_vardecl, model.ast_gen_loss_method,
-                              model.KL_loss, model.train_op, model.encoder.program_encoder.sigmas], feed_dict=feed_dict)
+                try:
+                    loss, ast_loss, \
+                    ast_gen_loss_concept, ast_gen_loss_api, \
+                    ast_gen_loss_type, ast_gen_loss_clstype, ast_gen_loss_var, \
+                    ast_gen_loss_vardecl, ast_gen_loss_method, \
+                    kl_loss, _, sigma = \
+                        sess.run([model.loss, model.ast_gen_loss,
+                                model.ast_gen_loss_concept, model.ast_gen_loss_api,
+                                model.ast_gen_loss_type, model.ast_gen_loss_clstype,
+                                model.ast_gen_loss_var, model.ast_gen_loss_vardecl, model.ast_gen_loss_method,
+                                model.KL_loss, model.train_op, model.encoder.program_encoder.sigmas], feed_dict=feed_dict)
+                except:
+                    logger.info('This batch has error, skip')
+                    error += 1
+                    if i == 0:
+                        with open('error_dict_{}.pickle'.format(error), 'wb') as handle:
+                            pickle.dump(feed_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+                    continue
 
                 #import pdb; pdb.set_trace()
                 #print(gnn_node_representation.shape)

@@ -29,7 +29,8 @@ class ProgramBeamSearcher:
                            field_types=None,
                            surrounding=None,
                            mapper=None,
-                           method_embedding=None
+                           method_embedding=None,
+                           types=None
                            ):
 
         ast_candies = self.tree_beam_searcher.beam_search(
@@ -40,7 +41,8 @@ class ProgramBeamSearcher:
             probs=[0. if j == 0 else None for j in range(self.beam_width)],
             mapper=mapper,
             surrounding=surrounding,
-            method_embedding=method_embedding
+            method_embedding=method_embedding,
+            types=types
         )
 
         return ast_candies

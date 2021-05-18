@@ -13,7 +13,12 @@
 # limitations under the License.
 
 from __future__ import print_function
+
+from collections import defaultdict, Counter, OrderedDict, namedtuple, deque
+from typing import List, Dict, Any, Tuple, Iterable, Set, Optional
+
 import argparse
+import numpy as np
 from data_extraction.data_reader.utils import read_vocab, dump_vocab
 
 CONFIG_GENERAL = ['batch_size', 'num_epochs', 'latent_size',
@@ -134,20 +139,20 @@ def init_mini_batch(batch_data, model):
 
 
 def extend_batch_data(batch_data, gnn_info, model):
+    eg_propagation_substeps = model.hyperparameters['eg_propagation_substeps']
     eg_schedule = gnn_info['eg_schedule']
     #node_labels = gnn_info['node_labels']
-    node_ids = gnn_info['node_ids']
+    node_ids = gnn_info['node_ids'][:eg_propagation_substeps]
+    len_path = min(len(eg_schedule), eg_propagation_substeps - 1)
     batch_data['eg_node_token_ids'].extend(node_ids)
     total_edge_types = len(EXPANSION_UNLABELED_EDGE_TYPE_NAMES) + len(
         EXPANSION_LABELED_EDGE_TYPE_NAMES)
-    eg_propagation_substeps = model.hyperparameters['eg_propagation_substeps']
 
     num_eg_nodes = len(node_ids)
     for eg_node_id in range(num_eg_nodes):
         batch_data['eg_initial_node_ids'].append(
             eg_node_id + batch_data['eg_node_offset'])
 
-    len_path = min(len(eg_schedule), eg_propagation_substeps - 1)
     try:
         for (step_num, schedule_step) in enumerate(eg_schedule[:len_path]):
             eg_node_id_to_step_target_id = OrderedDict()
@@ -177,6 +182,15 @@ def construct_minibatch(batch_gnn_info, model):
     batch_data = {}
     init_mini_batch(batch_data, model)
     for gnn_info in batch_gnn_info:
+        extend_batch_data(batch_data, gnn_info, model)
+    gnn_minibatch = prepare_gnn2nag_data(batch_data, model)
+    return gnn_minibatch, batch_data
+
+
+def construct_beam_search_minibatch(gnn_info_list, model):
+    batch_data = {}
+    init_mini_batch(batch_data, model)
+    for gnn_info in gnn_info_list:
         extend_batch_data(batch_data, gnn_info, model)
     gnn_minibatch = prepare_gnn2nag_data(batch_data, model)
     return gnn_minibatch, batch_data

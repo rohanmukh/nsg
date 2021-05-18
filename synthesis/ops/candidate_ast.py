@@ -37,7 +37,7 @@ class Candidate_AST:
                  formal_params,
                  field_types,
                  surrounding,
-                 prob, mappers, method_embedding):
+                 prob, mappers, method_embedding, types=None):
 
         ## SYNTHESIS
         self.head = self.tree_currNode = DSubTree()
@@ -84,6 +84,7 @@ class Candidate_AST:
         self.init_nullptr_varflag = initial_symtab[2]
 
         self.method_embedding = method_embedding
+        self.types = types
 
         ## COUNTER
         self.single_api_count = 0

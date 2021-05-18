@@ -25,13 +25,17 @@ class AstReverseMapper:
         self.node_type_numbers = []
         self.type_helper_val, self.expr_type_val, self.ret_type_val = [], [], []
         self.num_data = 0
+        self.gnn_node_infos = []
+        if hasattr(vocab, 'gnn_node_dict') and vocab.gnn_node_dict is not None:
+            self.ifgnn2nag = True
+        else:
+            self.ifgnn2nag = False
         return
 
     def add_data(self, nodes, edges, targets,
                  var_decl_ids,
                  node_type_number,
-                 type_helper_val, expr_type_val, ret_type_val):
-
+                 type_helper_val, expr_type_val, ret_type_val, gnn_info=None):
 
         self.nodes.extend(nodes)
         self.edges.extend(edges)
@@ -45,18 +49,35 @@ class AstReverseMapper:
         self.ret_type_val.extend(ret_type_val)
         self.num_data += len(nodes)
 
+        if gnn_info is not None:
+            self.gnn_node_infos.extend(gnn_info)
+
     def get_element(self, id):
-        return self.nodes[id], self.edges[id], self.targets[id], \
-               self.var_decl_ids[id], \
-               self.node_type_numbers[id], \
-               self.type_helper_val[id], self.expr_type_val[id], self.ret_type_val[id]
+        if self.ifgnn2nag:
+            return self.nodes[id], self.edges[id], self.targets[id], \
+                self.var_decl_ids[id], \
+                self.node_type_numbers[id], \
+                self.type_helper_val[id], self.expr_type_val[id], self.ret_type_val[id], \
+                self.gnn_node_infos[id]
+        else:
+            return self.nodes[id], self.edges[id], self.targets[id], \
+                self.var_decl_ids[id], \
+                self.node_type_numbers[id], \
+                self.type_helper_val[id], self.expr_type_val[id], self.ret_type_val[id]
 
     def decode_ast_paths(self, ast_element, partial=True):
 
-        nodes, edges, targets, \
-        var_decl_ids, \
-        node_type_numbers, \
-        type_helper_vals, expr_type_vals, ret_type_vals = ast_element
+        if self.ifgnn2nag:
+            nodes, edges, targets, \
+            var_decl_ids, \
+            node_type_numbers, \
+            type_helper_vals, expr_type_vals, ret_type_vals, \
+                gnn_info = ast_element
+        else:
+            nodes, edges, targets, \
+            var_decl_ids, \
+            node_type_numbers, \
+            type_helper_vals, expr_type_vals, ret_type_vals = ast_element
 
         for node in nodes:
             print(self.vocab.chars_concept[node], end=',')
@@ -66,10 +87,17 @@ class AstReverseMapper:
             print(edge, end=',')
         print()
 
+        if self.ifgnn2nag:
+            for gnn_node in gnn_info['node_labels']:
+                print(gnn_node, end=',')
+            print()
+            iter_object = ast_element[:-1]
+        else:
+            iter_object = ast_element
         for _, _, target, \
             var_decl_id, \
             node_type_numbers, \
-            type_helper_val, expr_type_val, ret_type_val in zip(*ast_element):
+            type_helper_val, expr_type_val, ret_type_val in zip(*iter_object):
             if node_type_numbers == SYMTAB_MOD:
                 print('--symtab--', end=',')
             elif node_type_numbers == VAR_NODE:

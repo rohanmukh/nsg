@@ -23,7 +23,7 @@ from synthesis.ops.candidate_ast import TYPE_NODE, VAR_NODE, API_NODE, SYMTAB_MO
     CLSTYPE_NODE, VAR_DECL_NODE
 #from dpu_utils.tfmodels import AsyncGGNN
 from gnn import AsyncGGNN
-from trainer_vae.utils import construct_minibatch
+from trainer_vae.utils import construct_minibatch, construct_beam_search_minibatch
 
 #EXPANSION_LABELED_EDGE_TYPE_NAMES = ["Child"]
 #EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Parent", "NextUse", "NextToken", "NextSibling", "NextSubtree",
@@ -123,6 +123,8 @@ class Model:
                                 )
 
             self.placeholders = {}
+            self.gnn_length = tf.placeholder(dtype=tf.int32,
+                                             name="gnn_node_length")
             eg_edge_type_num = len(EXPANSION_LABELED_EDGE_TYPE_NAMES) + len(
                 EXPANSION_UNLABELED_EDGE_TYPE_NAMES)
             self.placeholders['eg_node_token_ids'] = tf.placeholder(
@@ -175,6 +177,8 @@ class Model:
                     shape=[self.hyperparameters['eg_propagation_substeps']],
                     name="eg_receiving_nodes_nums")
 
+            self.placeholders['gnn_test'] = tf.placeholder(tf.bool)
+
             # We don't use context graph representation for now.
             eg_initial_node_representations = \
                 tf.nn.embedding_lookup(
@@ -210,12 +214,43 @@ class Model:
                         [self.placeholders['eg_receiving_node_ids']],
                         [self.placeholders['eg_receiving_node_nums']])
 
-                self.eg_node_representations = tf.reshape(
+                self.debug = tf.identity(self.eg_node_representations)
+
+                #self.eg_node_representations = tf.reshape(
+                #    self.eg_node_representations,
+                #    [-1, self.config.max_ast_depth, eg_hidden_size])
+                #self.gnn_inputs = tf.unstack(tf.transpose(
+                #    self.eg_node_representations, [1, 0, 2]), axis=0)
+                self.eg_node_representations_to_rnn = tf.reshape(
                     self.eg_node_representations,
-                    [-1, self.config.max_ast_depth, eg_hidden_size])
-                self.gnn_inputs = tf.unstack(tf.transpose(
-                    self.eg_node_representations, [1, 0, 2]), axis=0)
-                self.rnn_input = tf.transpose(self.eg_node_representations, [1, 0, 2])
+                    [tf.shape(self.nodes)[0], -1,
+                     2 * eg_hidden_size])
+                #self.eg_node_representations_train = tf.reshape(
+                #    self.eg_node_representations,
+                #    [-1, int(self.hyperparameters['eg_propagation_substeps'] / 2),
+                #     2 * eg_hidden_size])
+                #self.eg_node_representations_test = tf.reshape(
+                #    self.eg_node_representations,
+                #    [-1, 1, 2 * eg_hidden_size])
+
+                #self.eg_node_representations_to_rnn = tf.cond(
+                #    self.placeholders['gnn_test'],
+                #    lambda: tf.identity(self.eg_node_representations_test),
+                #    lambda: tf.identity(self.eg_node_representations_train))
+                self.gnn_inputs = tf.transpose(
+                    self.eg_node_representations_to_rnn, [1, 0, 2])
+
+                #self.gnn_input = tf.cond(
+                #    self.placeholders['gnn_test'],
+                #    lambda: tf.reverse(self.gnn_inputs, [0]),
+                #    lambda: tf.identity(self.gnn_inputs))
+
+                #self.gnn_reverse = tf.reverse(self.gnn_inputs, [0])
+                #self.gnn_inputs = tf.unstack(tf.transpose(
+                #    self.eg_node_representations_to_rnn, [1, 0, 2]), axis=0)
+                #self.gnn_inputs = tf.unstack(tf.transpose(
+                #    self.eg_node_representations, [1, 0, 3, 2]), axis=0)
+                #self.rnn_input = tf.transpose(self.eg_node_representations, [1, 0, 2])
 
         with tf.variable_scope("decoder"):
             latent_state_lifted = tf.layers.dense(self.latent_state, config.decoder.units)
@@ -243,7 +278,6 @@ class Model:
                     self.return_type,
                     self.encoder.program_encoder.surr_enc.internal_method_embedding,
                     self.initial_state)
-
 
         def get_loss(id, node_type):
             weights = tf.ones_like(self.targets, dtype=tf.float32) \
@@ -331,12 +365,13 @@ class Model:
         return state, method_embedding
 
 
-    # This method is called from infer.py, used for majority of experiments reported in the paper
+    # This method is called from infer.py, used for majority of experiments
+    # reported in the paper
     def get_initial_state(self, sess, apis, types, kws,
                           return_type, formal_param_inputs,
                           fields, method, classname, javadoc_kws,
                           surr_ret, surr_fp, surr_method,
-                          visibility=1.00
+                          visibility=1.00, gnn_info=None
                           ):
 
         feed = {self.apicalls: apis,
@@ -353,6 +388,10 @@ class Model:
                 self.surr_method: surr_method,
                 self.encoder.ev_drop_rate: np.asarray([1.0 - visibility] * 10),
                 }
+
+        if self.config.decoder.ifnag:
+            gnn_minibatch, gnn_batch_data = construct_minibatch(gnn_info, self)
+            feed.update(gnn_minibatch)
 
         [state, method_embedding] = sess.run([self.initial_state,
                                               self.encoder.program_encoder.surr_enc.dropped_embedding], feed)
@@ -381,12 +420,13 @@ class Model:
         return [[x, y, z] for x, y, z in zip(init_symtab, init_unused_varflag, init_nullptr_varflag)]
 
     def get_next_ast_state(self, sess, ast_node, ast_edge, ast_state,
-                           candies):
+                           candies, gnn_info=None):
 
         feed = {self.nodes.name: np.array(ast_node, dtype=np.int32),
                 self.edges.name: np.array(ast_edge, dtype=np.bool)}
 
         self.feed_inputs(feed, candies)
+        new_data = feed.copy()
 
         for i in range(self.config.decoder.num_layers):
             feed[self.initial_state[i].name] = np.array(ast_state[i])
@@ -397,14 +437,25 @@ class Model:
         feed[self.decoder.program_decoder.ast_tree.init_nullptr_varflag] = np.array(
             [candy.init_nullptr_varflag for candy in candies])
 
+        if gnn_info is not None:
+            gnn_minibatch, gnn_batch_data = construct_beam_search_minibatch(
+                gnn_info, self)
+            feed.update(gnn_minibatch)
+            feed.update({self.placeholders['gnn_test']: True})
+
+        #print(len(gnn_batch_data['eg_node_token_ids']))
+        #tt = sess.run([self.nodes, self.gnn_inputs, self.gnn_input_test], feed)
+        #print(tt[0].shape, tt[1].shape, tt[2].shape)
+        #import pdb; pdb.set_trace()
+
         [ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs] = sess.run(
             [self.decoder.program_decoder.ast_tree.state,
-             self.decoder.program_decoder.ast_tree.symtab,
-             self.decoder.program_decoder.ast_tree.unused_varflag,
-             self.decoder.program_decoder.ast_tree.nullptr_varflag,
-             self.ast_top_k_indices, self.ast_top_k_values], feed)
+            self.decoder.program_decoder.ast_tree.symtab,
+            self.decoder.program_decoder.ast_tree.unused_varflag,
+            self.decoder.program_decoder.ast_tree.nullptr_varflag,
+            self.ast_top_k_indices, self.ast_top_k_values], feed)
 
-        return ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs
+        return ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs, new_data
 
     def feed_inputs(self, feed, candies):
         beam_width = len(candies)
@@ -472,6 +523,225 @@ class Model:
 
         return
 
+    def get_next_ast_state_with_gnn(self, sess, ast_node, ast_edge, ast_state,
+                           candies, gnn_info=None, input_data=None):
+
+        curr_node = np.zeros([len(candies), self.config.max_ast_depth], np.int32)
+        curr_edge = np.zeros([len(candies), self.config.max_ast_depth], np.bool)
+        if input_data is not None:
+            curr_length = input_data[self.var_decl_ids.name].shape[1]
+            old_node = input_data[self.nodes.name]
+            old_edge = input_data[self.edges.name]
+            curr_node[:, :curr_length] = old_node
+            curr_edge[:, :curr_length] = old_edge
+            curr_node[:, curr_length] = np.array(ast_node, dtype=np.int32).flatten()
+            curr_edge[:, curr_length] = np.array(ast_edge, dtype=np.bool).flatten()
+            feed = {self.nodes.name: curr_node,
+                    self.edges.name: curr_edge}
+        else:
+            curr_node[:, 0] = np.array(ast_node, dtype=np.int32).flatten()
+            curr_edge[:, 0] = np.array(ast_edge, dtype=np.bool).flatten()
+            feed = {self.nodes.name: curr_node,
+                    self.edges.name: curr_edge}
+
+        self.feed_inputs_gnn(feed, candies, input_data)
+        new_data = feed.copy()
+
+        feed[self.decoder.program_decoder.ast_tree.init_symtab] = np.array([candy.symtab for candy in candies])
+        feed[self.decoder.program_decoder.ast_tree.init_unused_varflag] = np.array(
+            [candy.init_unused_varflag for candy in candies])
+        feed[self.decoder.program_decoder.ast_tree.init_nullptr_varflag] = np.array(
+            [candy.init_nullptr_varflag for candy in candies])
+
+        if gnn_info is not None:
+            for i, item in enumerate(gnn_info):
+                node_ids = np.zeros((self.config.max_ast_depth), dtype=np.int32)
+                len_path = min(len(item['node_ids']), self.config.max_ast_depth)
+                temp_node_ids = item['node_ids'][:len_path]
+                node_ids[:len_path] = temp_node_ids
+                gnn_info[i]['node_ids'] = node_ids
+
+            gnn_minibatch, gnn_batch_data = construct_beam_search_minibatch(
+                gnn_info, self)
+            feed.update(gnn_minibatch)
+            feed.update({self.placeholders['gnn_test']: False})
+
+
+            #for node_label in gnn_info['node_labels']:
+            #    gnn_value = \
+            #        self.gnn_node_vocab.conditional_add_or_get_node_val(
+            #            node_label, self.infer)
+            #    node_ids.append(gnn_value)
+
+            #gnn_info['node_ids'] = node_ids
+
+        #print(len(gnn_batch_data['eg_node_token_ids']))
+        #tt = sess.run([self.nodes, self.gnn_inputs, self.gnn_input_test], feed)
+        #print(tt[0].shape, tt[1].shape, tt[2].shape)
+        #import pdb; pdb.set_trace()
+
+        [ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs] = sess.run(
+            [self.decoder.program_decoder.ast_tree.state,
+            self.decoder.program_decoder.ast_tree.symtab,
+            self.decoder.program_decoder.ast_tree.unused_varflag,
+            self.decoder.program_decoder.ast_tree.nullptr_varflag,
+            self.ast_top_k_indices, self.ast_top_k_values], feed)
+
+        return ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs, new_data
+
+
+    def feed_inputs_gnn(self, feed, candies, input_data):
+        beam_width = len(candies)
+        max_depth = self.config.max_ast_depth
+        input_fp_depth = candies[0].formal_param_inputs.shape[0]
+        input_field_depth = candies[0].field_types.shape[0]
+        total_var_map_length = candies[0].mappers.shape[0]
+        total_surr_methods = candies[0].method_embedding.shape[0]
+        dimension = candies[0].method_embedding.shape[1]
+
+        return_type = np.zeros(shape=(beam_width,), dtype=np.int32)
+        formal_param_inputs = np.zeros(shape=(beam_width, input_fp_depth), dtype=np.int32)
+        field_types = np.zeros(shape=(beam_width, input_field_depth), dtype=np.int32)
+
+        var_decl_ids = np.zeros(shape=(beam_width, max_depth), dtype=np.int32)
+        node_type_number = np.zeros(shape=(beam_width, max_depth), dtype=np.int32)
+
+        all_var_mappers = np.zeros(shape=(beam_width, total_var_map_length), dtype=np.int32)
+        type_helper_val = np.zeros(shape=(beam_width, max_depth), dtype=np.int32)
+        expr_type_val = np.zeros(shape=(beam_width, max_depth), dtype=np.int32)
+        ret_type_val = np.zeros(shape=(beam_width, max_depth), dtype=np.int32)
+
+        ret_reached = np.zeros(shape=(beam_width, max_depth), dtype=np.bool)
+        iattrib = np.zeros(shape=(beam_width, max_depth, 3), dtype=np.bool)
+
+        method_embeddings = np.zeros(shape=(beam_width, total_surr_methods, dimension), dtype=np.float32)
+
+        #apicalls = np.zeros(shape=(beam_width, self.config.max_keywords), dtype=np.int32)
+        #types = np.zeros(shape=(beam_width, self.config.max_keywords), dtype=np.int32)
+        #keywords = np.zeros(shape=[beam_width, self.config.max_keywords], dtype=np.int32)
+
+        #method = np.zeros(shape=[beam_width, self.config.max_camel_case], dtype=np.int32)
+        #classname = np.zeros(shape=[beam_width, self.config.max_camel_case], dtype=np.int32)
+        #javadoc_kws = np.zeros(shape=[beam_width, self.config.max_keywords], dtype=np.int32)
+
+        #surr_ret = np.zeros(shape=[beam_width, self.config.max_keywords], dtype=np.int32)
+        #surr_fp = np.zeros(shape=[beam_width,
+        #                          self.config.max_keywords,
+        #                          self.config.max_camel_case], dtype=np.int32)
+        #surr_method = np.zeros(
+        #    shape=[beam_width,
+        #           self.config.max_keywords,
+        #           self.config.max_camel_case], dtype=np.int32)
+
+        if input_data is not None:
+            curr_length = input_data[self.var_decl_ids.name].shape[1]
+        else:
+            curr_length = 0
+        for batch_id, candy in enumerate(candies):
+            return_type[batch_id] = candy.return_type
+            formal_param_inputs[batch_id] = candy.formal_param_inputs
+            field_types[batch_id] = candy.field_types
+
+            var_decl_ids[batch_id, curr_length] = candy.var_decl_id
+            all_var_mappers[batch_id] = candy.mappers
+
+            node_type_number[batch_id, curr_length] = candy.next_node_type
+
+            ret_expr_helper_types = candy.get_ret_expr_helper_types()
+            ret_type_val[batch_id, curr_length], \
+                expr_type_val[batch_id, curr_length], \
+                type_helper_val[batch_id, curr_length] = \
+                ret_expr_helper_types[0][0], ret_expr_helper_types[1][0], \
+                ret_expr_helper_types[2][0]
+
+            ret_reached[batch_id, curr_length] = candy.get_return_reached()
+            iattrib[batch_id, curr_length, :] = np.array(candy.get_iattrib())
+
+            method_embeddings[batch_id] = candy.method_embedding
+
+        if input_data is not None:
+            #var_decl_ids[:, :curr_length] = input_data[self.var_decl_ids.name]
+            #var_decl_ids = np.concatenate([old_var_decl_ids, var_decl_ids], 1)
+            #old_type_helper_val = input_data[self.type_helper_val.name]
+            #type_helper_val = np.concatenate([old_type_helper_val, type_helper_val], 1)
+            #old_ret_type_val = input_data[self.ret_type_val.name]
+            #ret_type_val = np.concatenate([old_ret_type_val, ret_type_val], 1)
+            #old_expr_type_val = input_data[self.expr_type_val.name]
+            #expr_type_val = np.concatenate([old_expr_type_val, expr_type_val], 1)
+
+            #old_node_type_number = input_data[self.node_type_number]
+            #node_type_number = np.concatenate([old_node_type_number, node_type_number], 1)
+            #old_ret_reached = input_data[self.ret_reached]
+            #ret_reached = np.concatenate([old_ret_reached, ret_reached], 1)
+            #old_iattrib = input_data[self.iattrib]
+            #iattrib = np.concatenate([old_iattrib, iattrib], 1)
+            #old_method_embeddings = input_data[self.encoder.program_encoder.surr_enc.internal_method_embedding]
+            #method_embeddings = np.concatenate([old_method_embeddings, method_embeddings], 1)
+
+            var_decl_ids[:, :curr_length] = input_data[self.var_decl_ids.name]
+            type_helper_val[:, :curr_length] = input_data[self.type_helper_val.name]
+            ret_type_val[:, :curr_length] = input_data[self.ret_type_val.name]
+            expr_type_val[:, :curr_length] = input_data[self.expr_type_val.name]
+
+            node_type_number[:, :curr_length] = input_data[self.node_type_number]
+            ret_reached[:, :curr_length] = input_data[self.ret_reached]
+            iattrib[:, :curr_length] = input_data[self.iattrib]
+            #method_embeddings[:, :curr_length] = input_data[self.encoder.program_encoder.surr_enc.internal_method_embedding]
+
+            #old_formal_param_inputs = input_data[self.formal_param_inputs]
+            #formal_param_inputs = np.concatenate(
+            #    [old_formal_param_inputs, formal_param_inputs], 1)
+            #old_return_type = input_data[self.return_type]
+            #return_type = np.concatenate([old_return_type, return_type], 1)
+            #old_field_types = input_data[self.field_inputs]
+            #field_types = np.concatenate([old_field_types, field_types], 1)
+            #old_all_var_mappers = input_data[self.all_var_mappers]
+            #all_var_mappers = np.concatenate([old_all_var_mappers, all_var_mappers], 1)
+
+        apicalls = candy.types[14]
+        types = candy.types[15]
+        keywords = candy.types[16]
+        method = candy.types[17]
+        classname = candy.types[18]
+        javadoc_kws = candy.types[19]
+        surr_ret = candy.types[20]
+        surr_fp = candy.types[21]
+        surr_method = candy.types[22]
+
+        feed_extra = {
+            self.var_decl_ids.name: np.array(var_decl_ids, dtype=np.int32),
+            self.type_helper_val.name: np.array(type_helper_val, dtype=np.int32),
+            self.expr_type_val.name: np.array(expr_type_val, dtype=np.int32),
+            self.ret_type_val.name: np.array(ret_type_val, dtype=np.int32),
+
+            self.ret_reached: ret_reached,
+            self.iattrib: np.array(iattrib, dtype=np.bool),
+
+            self.return_type: return_type,
+            self.formal_param_inputs: formal_param_inputs,
+            self.field_inputs: field_types,
+
+            self.node_type_number: node_type_number,
+            self.all_var_mappers: all_var_mappers,
+            self.encoder.program_encoder.surr_enc.internal_method_embedding: method_embeddings,
+
+            self.types: types,
+
+            self.apicalls: apicalls,
+            self.types: types,
+            self.keywords: keywords,
+            self.method: method,
+            self.classname: classname,
+            self.javadoc_kws: javadoc_kws,
+            self.surr_ret: surr_ret,
+            self.surr_fp: surr_fp,
+            self.surr_method: surr_method
+        }
+
+        feed.update(feed_extra)
+
+        return
+
     def get_decoder_probs(self, sess, nodes, edges, targets, var_decl_ids, ret_reached, \
                           node_type_number, \
                           type_helper_val, expr_type_val, ret_type_val, \
@@ -514,8 +784,10 @@ class Model:
         feed.update({self.type_helper_val: type_helper_val, self.expr_type_val: expr_type_val,
                      self.ret_type_val: ret_type_val})
 
-        gnn_minibatch, gnn_batch_data = construct_minibatch(gnn_info, self)
-        feed.update(gnn_minibatch)
+        if self.config.decoder.ifnag:
+            gnn_minibatch, gnn_batch_data = construct_minibatch(gnn_info, self)
+            feed.update(gnn_minibatch)
+            feed.update({self.placeholders['gnn_test']: False})
 
         concept_matrix, api_matrix, type_matrix, \
         clstype_matrix, var_matrix, vardecl_matrix, op_matrix, \
@@ -588,8 +860,9 @@ class Model:
                     'eg_token_vocab_size': 100,
                     'eg_literal_vocab_size': 10,
                     'eg_max_variable_choices': 10,
-                    #'eg_propagation_substeps': 100,
-                    'eg_propagation_substeps': 85,
+                    'eg_propagation_substeps': 128,
+                    #'eg_propagation_substeps': 80,
+                    #'eg_propagation_substeps': 64,
                     'eg_hidden_size': 64,
                     #'eg_edge_label_size': 16,
                     'eg_edge_label_size': 0,

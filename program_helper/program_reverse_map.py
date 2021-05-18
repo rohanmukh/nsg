@@ -21,6 +21,14 @@ from utilities.basics import reconstruct_camel_case
 
 class ProgramRevMapper:
     def __init__(self, vocab):
+        if hasattr(vocab, 'gnn_node_dict') and vocab.gnn_node_dict is not None:
+            self.ifgnn2nag = True
+            chars_gnn_node = dict()
+            for item, value in vocab.gnn_node_dict.items():
+                chars_gnn_node[value] = item
+                vocab.__setattr__('chars_gnn_node', chars_gnn_node)
+        else:
+            self.ifgnn2nag = False
         self.vocab = vocab
         self.ast_mapper = AstReverseMapper(vocab)
         self.fp_mapper = FPReverseMapper(vocab)
@@ -37,8 +45,6 @@ class ProgramRevMapper:
         self.return_reached = []
         self.num_data = 0
 
-
-
     def update_data_size(self):
         assert self.ast_mapper.num_data == self.fp_mapper.num_data
         assert self.fp_mapper.num_data == self.ret_mapper.num_data
@@ -47,13 +53,23 @@ class ProgramRevMapper:
         return
 
     def add_batched_data(self, loader_batch):
-        nodes, edges, targets, var_decl_ids, ret_reached, \
-        node_type_number, \
-        type_helper_val, expr_type_val, ret_type_val, \
-        all_var_mappers, iattrib,\
-        ret_type, fp_in, fields, \
-        apicalls, types, keywords, method, classname, javadoc_kws, \
-        surr_ret, surr_fp, surr_method = loader_batch
+        if self.ifgnn2nag:
+            nodes, edges, targets, var_decl_ids, ret_reached, \
+            node_type_number, \
+            type_helper_val, expr_type_val, ret_type_val, \
+            all_var_mappers, iattrib,\
+            ret_type, fp_in, fields, \
+            apicalls, types, keywords, method, classname, javadoc_kws, \
+            surr_ret, surr_fp, surr_method, gnn_info = loader_batch
+        else:
+            nodes, edges, targets, var_decl_ids, ret_reached, \
+            node_type_number, \
+            type_helper_val, expr_type_val, ret_type_val, \
+            all_var_mappers, iattrib,\
+            ret_type, fp_in, fields, \
+            apicalls, types, keywords, method, classname, javadoc_kws, \
+            surr_ret, surr_fp, surr_method = loader_batch
+            gnn_info = None
 
         self.add_data(nodes, edges, targets, var_decl_ids, \
                 node_type_number, ret_reached,\
@@ -61,7 +77,7 @@ class ProgramRevMapper:
                 all_var_mappers, \
                 ret_type, fp_in, fields, \
                 apicalls, types, keywords, method, classname, javadoc_kws,\
-                    surr_ret, surr_fp, surr_method)
+                    surr_ret, surr_fp, surr_method, gnn_info)
 
         return
 
@@ -71,12 +87,13 @@ class ProgramRevMapper:
                 all_var_mappers, \
                 ret_type, fp_in, fields, \
                 apicalls, types, keywords, method, classname, javadoc_kws,\
-                    surr_ret, surr_fp, surr_method
+                    surr_ret, surr_fp, surr_method, gnn_info=None
                  ):
         self.ast_mapper.add_data(nodes, edges, targets,
                                  var_decl_ids,
                                  node_type_number,
-                                 type_helper_val, expr_type_val, ret_type_val
+                                 type_helper_val, expr_type_val, ret_type_val,
+                                 gnn_info
                                  )
         self.fp_mapper.add_data(fp_in)
         self.field_mapper.add_data(fields)
