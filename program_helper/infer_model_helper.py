@@ -143,6 +143,37 @@ class InferModelHelper:
 
         return
 
+
+
+
+    def get_jaccard_probabilities(self, data_path=None,
+                            debug_print=False,
+                            max_programs=None,
+                            real_ast_jsons=None
+                            ):
+
+        self.loader = Loader(data_path, self.infer_model.config)
+        ## TODO: need to remove
+        self.ast_checker.java_compiler = self.loader.program_reader.java_compiler
+
+        psis, mappers, method_embeddings = self.encode_inputs()
+
+        jsons_synthesized, javas_synthesized = self.decode_programs(
+            initial_state=psis,
+            debug_print=debug_print,
+            viability_check=False,
+            max_programs=max_programs,
+            real_ast_jsons=self.loader.program_reader.json_programs["programs"],
+            mappers=mappers,
+            method_embeddings=method_embeddings
+        )
+        # real_codes = self.extract_real_codes(self.loader.program_reader.json_programs)
+
+        # print(self.loader.program_reader.json_programs["programs"])
+
+        return
+
+
     def extract_real_codes(self, json_program):
         # real_codes = []
         # for js in json_program['programs']:
