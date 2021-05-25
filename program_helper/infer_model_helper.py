@@ -28,7 +28,7 @@ from synthesis.write_java import Write_Java
 from trainer_vae.infer import BayesianPredictor
 from data_extraction.data_reader.data_loader import Loader
 from program_helper.program_reverse_map import ProgramRevMapper
-from utilities.basics import dump_json, dump_java
+from utilities.basics import dump_json, dump_java, stripJavaDoc
 from utilities.logging import create_logger
 
 from nltk.translate.bleu_score import sentence_bleu
@@ -354,13 +354,13 @@ class InferModelHelper:
         avg_max_bleu_score = 0.
         avg_bleu_score = 0.
         for real_java, predictions in zip(real_javas, javas_synthesized):
+            real_java = stripJavaDoc(real_java)
+            real_java = real_java.replace('.', ' ').strip()
             real_java_tokens = word_tokenize(real_java)
-
             max_bleu = 0.
             for j, prediction in enumerate(predictions):
-                prediction = InferModelHelper.prune_comments(prediction)
+                prediction = InferModelHelper.prune_comments(prediction).replace('.',' ').strip()
                 prediction_tokens = word_tokenize(prediction)
-
                 bleu = sentence_bleu(real_java_tokens, prediction_tokens, weights=weights)
                 if bleu > max_bleu:
                     max_bleu = bleu
