@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from __future__ import print_function
+
+import warnings
+
 import numpy as np
 import os
 
@@ -25,9 +28,11 @@ from synthesis.write_java import Write_Java
 from trainer_vae.infer import BayesianPredictor
 from data_extraction.data_reader.data_loader import Loader
 from program_helper.program_reverse_map import ProgramRevMapper
-from utilities.basics import dump_json, dump_java
+from utilities.basics import dump_json, dump_java, stripJavaDoc
 from utilities.logging import create_logger
 
+from nltk.translate.bleu_score import sentence_bleu
+from nltk.tokenize import word_tokenize
 
 class InferModelHelper:
     '''
@@ -143,11 +148,44 @@ class InferModelHelper:
 
         return
 
+
+
+
+    def get_jaccard_probabilities(self, data_path=None,
+                            debug_print=False,
+                            max_programs=None,
+                            real_ast_jsons=None,
+                            real_javas=None
+                            ):
+
+        self.loader = Loader(data_path, self.infer_model.config)
+        ## TODO: need to remove
+        self.ast_checker.java_compiler = self.loader.program_reader.java_compiler
+
+        psis, mappers, method_embeddings = self.encode_inputs()
+
+        jsons_synthesized, javas_synthesized = self.decode_programs(
+            initial_state=psis,
+            debug_print=debug_print,
+            viability_check=False,
+            max_programs=max_programs,
+            real_ast_jsons=self.loader.program_reader.json_programs["programs"],
+            mappers=mappers,
+            method_embeddings=method_embeddings,
+            real_javas=real_javas
+        )
+
+        # real_json = self.extract_real_codes(self.loader.program_reader.json_programs)
+
+
+        return
+
+
     def extract_real_codes(self, json_program):
         # real_codes = []
         # for js in json_program['programs']:
         #     real_codes.append(js['body'])
-        return json_program['programs']
+        return json_program
 
     def encode_inputs(self,
                       skip_batches=0
@@ -221,7 +259,8 @@ class InferModelHelper:
                         max_programs=None,
                         real_ast_jsons=None,
                         mappers=None,
-                        method_embeddings=None
+                        method_embeddings=None,
+                        real_javas=None
                         ):
         jsons_synthesized = list()
         javas_synthesized = list()
@@ -240,7 +279,6 @@ class InferModelHelper:
             )
             method_name = self.prog_mapper.get_reconstructed_method_name(i,
                                                                          vocab=self.infer_model.config.vocab.chars_kw)
-
 
 
             if viability_check:
@@ -274,7 +312,6 @@ class InferModelHelper:
             jsons_synthesized.append({'programs': beam_js})
             javas_synthesized.append(beam_javas)
 
-
             if real_ast_jsons is not None:
                 real_ast_json = real_ast_jsons[i]
                 self.ast_sim_checker.check_similarity_for_all_beams(real_ast_json, beam_js)
@@ -284,10 +321,56 @@ class InferModelHelper:
 
         if viability_check:
             self.ast_checker.print_stats()
+
         if real_ast_jsons is not None:
             self.ast_sim_checker.print_stats()
 
+        if real_javas is not None:
+            self.get_bleu_score(real_javas, javas_synthesized)
+
         return jsons_synthesized, javas_synthesized
+
+    def get_bleu_score(self, real_javas, javas_synthesized):
+        for weight in [(1., 0., 0., 0.), (0.5, 0.5, 0., 0.), (0, 1., 0., 0.), (0.5, 0.25, 0.25, 0.), ]:
+            avg_max_bleu_score, avg_bleu_score = InferModelHelper.calculate_bleu_score(real_javas,
+                                                                                       javas_synthesized,
+                                                                                       weights=weight)
+            self.logger.info('\n\tBleu weight :: {}'.format(weight))
+            self.logger.info('\tAverage Max Bleu Score :: {0:0.4f}'.format(avg_max_bleu_score))
+            self.logger.info('\tAverage Bleu Score :: {0:0.4f}'.format(avg_bleu_score))
+
+    @staticmethod
+    def prune_comments(java_code):
+        lines = []
+        for line in java_code.splitlines():
+            if not line.startswith('//'):
+                lines.append(line)
+        output = '\n'.join(lines)
+        return output.strip()
+
+    @staticmethod
+    def calculate_bleu_score(real_javas, javas_synthesized, weights=(1.0, 0, 0, 0)):
+        warnings.filterwarnings("ignore")
+        avg_max_bleu_score = 0.
+        avg_bleu_score = 0.
+        for real_java, predictions in zip(real_javas, javas_synthesized):
+            real_java = stripJavaDoc(real_java)
+            real_java = real_java.replace('.', ' ').strip()
+            real_java_tokens = word_tokenize(real_java)
+            max_bleu = 0.
+            for j, prediction in enumerate(predictions):
+                prediction = InferModelHelper.prune_comments(prediction).replace('.',' ').strip()
+                prediction_tokens = word_tokenize(prediction)
+                bleu = sentence_bleu(real_java_tokens, prediction_tokens, weights=weights)
+                if bleu > max_bleu:
+                    max_bleu = bleu
+                avg_bleu_score += bleu
+            avg_max_bleu_score += max_bleu
+
+        avg_max_bleu_score /= len(real_javas)
+        avg_bleu_score /= len(real_javas) * len(javas_synthesized[0][0])
+
+        return avg_max_bleu_score, avg_bleu_score
 
     def get_json_and_java(self, ast_nodes, outcome_strings, name='foo', type_vocab=None, mapper=None):
 
