@@ -140,10 +140,11 @@ class AstSimilarityChecker:
         self.logger.info('\tMinimum Jaccard Similarity :: {0:0.4f}'.format(self.min_jaccard))
 
         avg_min_bayou = self.min_distance_like_bayou / (self.min_distance_count + 0.00001)
-        self.logger.info('\tMinimum Jaccard Distance amongst all beams :: {0:0.4f}'.format(avg_min_bayou))
+        self.logger.info('\tMaximum Jaccard Similarity amongst all beams :: {0:0.4f}'.format(1-avg_min_bayou))
 
         keys = self.min_distance_by_prog_length.keys()
         for k in sorted(keys):
             val = self.min_distance_by_prog_length.get_item_at_id(k, id=2)
             count = self.min_distance_by_prog_length.get_item_at_id(k, id=0)
-            print("Length of program {}: Average min Jaccard distance :: {} count :: {}".format(k, truncate_two_decimals(val), count))
+            print("Length of program {} :: Average Maximum Jaccard Similarity amongst all beams :: {} count :: {}".
+                  format(k, truncate_two_decimals(1-val), count))
