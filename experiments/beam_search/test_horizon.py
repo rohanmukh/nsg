@@ -24,9 +24,9 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
-NUM_DATA = 1000
+NUM_DATA = 100
 SKIP_BATCHES = 0
-BEAM_WIDTH = 20
+BEAM_WIDTH = 10
 SEED = 200
 
 
@@ -49,6 +49,7 @@ def test_from_separate_corpus(_clargs):
     infer_model.get_jaccard_probabilities(
         data_path=dump_data_path,
         debug_print=False,
+        real_javas=infer_model.reader.real_javas
     )
 
     infer_model.close()

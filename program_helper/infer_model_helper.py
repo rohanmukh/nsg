@@ -340,15 +340,27 @@ class InferModelHelper:
             self.logger.info('\tAverage Bleu Score :: {0:0.4f}'.format(avg_bleu_score))
 
     @staticmethod
+    def prune_comments(java_code):
+        lines = []
+        for line in java_code.splitlines():
+            if not line.startswith('//'):
+                lines.append(line)
+        output = '\n'.join(lines)
+        return output.strip()
+
+    @staticmethod
     def calculate_bleu_score(real_javas, javas_synthesized, weights=(1.0, 0, 0, 0)):
         warnings.filterwarnings("ignore")
         avg_max_bleu_score = 0.
         avg_bleu_score = 0.
         for real_java, predictions in zip(real_javas, javas_synthesized):
             real_java_tokens = word_tokenize(real_java)
+
             max_bleu = 0.
-            for prediction in predictions:
+            for j, prediction in enumerate(predictions):
+                prediction = InferModelHelper.prune_comments(prediction)
                 prediction_tokens = word_tokenize(prediction)
+
                 bleu = sentence_bleu(real_java_tokens, prediction_tokens, weights=weights)
                 if bleu > max_bleu:
                     max_bleu = bleu
