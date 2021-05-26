@@ -743,81 +743,82 @@ class AstGenChecker(AstChecker):
         self.print_percentage_stats(passed=self.scope_count_passed,
                                     passed_blank=0,
                                     failed=self.scope_count_failed,
-                                    info='undeclared VARiables in scope')
+                                    info='No undeclared variable access')
 
 
         self.print_percentage_stats(passed=self.passed_input_var_check+self.passed_nullptr_check,
                                     passed_blank=0,
                                     failed=self.failed_input_var_check+self.failed_nullptr_check,
-                                    info='undefined FP var access')
+                                    info='valid formal parameter access')
 
 
         self.print_percentage_stats(passed=self.passed_field_var_check,
                                     passed_blank=0,
                                     failed=self.failed_field_var_check,
-                                    info='undefined FIELD var access')
+                                    info='valid class var access')
 
 
         self.print_percentage_stats(passed=self.obj_init_count_passed,
                                     passed_blank=0,
                                     failed=self.obj_init_count_failed,
-                                    info='has uninitialized objects')
+                                    info='no uninitialized objects')
 
         self.print_percentage_stats(passed=self.scope_count_passed + self.passed_input_var_check
                                            + self.passed_field_var_check + self.passed_nullptr_check,
                                     passed_blank=0,
                                     failed=self.scope_count_failed + self.failed_input_var_check
                                            + self.failed_field_var_check + self.failed_nullptr_check,
-                                    info='undefined ALL var access')
+                                    info='no variable access error')
 
 
         self.print_percentage_stats(passed=self.passed_expr_type_check,
                                     passed_blank=self.passed_expr_type_check_with_blank,
                                     failed=self.failed_expr_type_check,
-                                    info='expr types')
+                                    info='object-method comptibility / expr types')
 
         self.print_percentage_stats(passed=self.passed_ret_type_check,
                                     passed_blank=self.passed_ret_type_check_with_blank,
                                     failed=self.failed_ret_type_check,
-                                    info='ret types')
+                                    info='ret type at call site')
 
         self.print_percentage_stats(passed=self.passed_formal_type_check,
                                     passed_blank=self.passed_formal_type_check_with_blank,
                                     failed=self.failed_formal_type_check,
-                                    info='formal types')
+                                    info='actual param types')
 
         self.print_percentage_stats(passed=self.passed_stmt_type_check,
                                     passed_blank=self.passed_stmt_type_check_with_blank,
                                     failed=self.failed_stmt_type_check,
-                                    info='return stmt type check')
+                                    info='return stmt type')
 
 
         self.print_percentage_stats(passed=self.passed_type_check,
                                     passed_blank=self.passed_type_check_with_blank,
                                     failed=self.failed_type_check,
-                                    info='ALL types')
+                                    info='No type errors')
 
 
         self.print_percentage_stats(passed=self.ret_stmt_exists_passed,
                                     passed_blank=0,
                                     failed=self.ret_stmt_exists_failed,
-                                    info='return stmts exist')
+                                    info='return stmt exists')
 
         self.print_percentage_stats(passed=self.unused_var_count_passed,
                                     passed_blank=0,
                                     failed=self.unused_var_count_failed,
-                                    info='had unused variables')
-
-
-        self.print_percentage_stats(passed=self.int_method_count_passed,
-                                    passed_blank=0,
-                                    failed=self.int_method_count_failed,
-                                    info='uninitiated method access')
+                                    info='no unused variables')
 
         self.print_percentage_stats(passed=self.nextcheck_passed,
                                     passed_blank=0,
                                     failed=self.nextcheck_failed,
-                                    info='next check passed')
+                                    info='has next safety')
+
+        self.print_percentage_stats(passed=self.int_method_count_passed,
+                                    passed_blank=0,
+                                    failed=self.int_method_count_failed,
+                                    info='uninitiated method access (NOT in paper)')
+
+
 
         # self.logger.info('Percentages at production rule distance')
         # self.print_pdf_info(fail_stat_dict=self.failed_at_distance, total_percentage=100, extra_info='everything')
@@ -848,11 +849,11 @@ class AstGenChecker(AstChecker):
         #                                 failed=self.failed_at_length[i],
         #                                 info='all types')
 
-        self.logger.info('Num times var accessed')
-        self.logger.info(self.num_times_var_accesed)
-
-        self.logger.info('Num times var accessed successfully')
-        self.logger.info(self.num_times_var_accesed_successfully)
+        # self.logger.info('Num times var accessed')
+        # self.logger.info(self.num_times_var_accesed)
+        #
+        # self.logger.info('Num times var accessed successfully')
+        # self.logger.info(self.num_times_var_accesed_successfully)
 
     def print_percentage_stats(self, passed=None, passed_blank=None, failed=None, info=None):
         percentage = passed/(passed + failed + 0.001) * 100.
