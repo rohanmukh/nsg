@@ -133,11 +133,11 @@ class AstSimilarityChecker:
 
 
     def print_stats(self):
-        avg_similarity = self.sum_jaccard / (self.count + 0.00001)
+        avg_distance = self.sum_jaccard / (self.count + 0.00001)
         self.logger.info('')
-        self.logger.info('\tAverage Jaccard Similarity :: {0:0.4f}'.format(avg_similarity))
-        self.logger.info('\tMaximum Jaccard Similarity :: {0:0.4f}'.format(self.max_jaccard))
-        self.logger.info('\tMinimum Jaccard Similarity :: {0:0.4f}'.format(self.min_jaccard))
+        self.logger.info('\tAverage Jaccard Similarity :: {0:0.4f}'.format( 1 - avg_distance))
+        # self.logger.info('\tMaximum Jaccard Similarity :: {0:0.4f}'.format(self.max_jaccard))
+        # self.logger.info('\tMinimum Jaccard Similarity :: {0:0.4f}'.format(self.min_jaccard))
 
         avg_min_bayou = self.min_distance_like_bayou / (self.min_distance_count + 0.00001)
         self.logger.info('\tMaximum Jaccard Similarity amongst all beams :: {0:0.4f}'.format(1-avg_min_bayou))
