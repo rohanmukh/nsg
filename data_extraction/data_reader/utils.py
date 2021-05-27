@@ -139,12 +139,12 @@ def get_paths_topdown(node):
             paths = get_paths_topdown(child)
             if len(paths)>0:
                 for path in paths:
-                    # path = [path]
-                    # path.insert(0, "DBranch")
+                    path = [path]
+                    path.insert(0, ["DBranch"])
                     out.append(path)
             else:
-                pass
-                # out.append(["DBranch"])
+                # pass
+                out.append(["DBranch"])
         return out
 
     elif node_type == 'DLoop':
@@ -153,12 +153,12 @@ def get_paths_topdown(node):
             paths = get_paths_topdown(child)
             if len(paths) > 0:
                 for path in paths:
-                    # path = [path]
-                    # path.insert(0, "DLoop")
+                    path = [path]
+                    path.insert(0, ["DLoop"])
                     out.append(path)
                 else:
-                    pass
-                    # out.append(["DLoop"])
+                    # pass
+                    out.append(["DLoop"])
         return out
 
     elif node_type == 'DExcept':
@@ -168,16 +168,15 @@ def get_paths_topdown(node):
             paths = get_paths_topdown(child)
             if len(paths) > 0:
                 for path in paths:
-                    # path = [path]
-                    # path.insert(0, "DExcept")
+                    path = [path]
+                    path.insert(0, ["DExcept"])
                     out.append(path)
             else:
-                pass
-                # out.append(["DExcept"])
+                # pass
+                out.append(["DExcept"])
         return out
     elif node_type == 'DAPIInvoke':
-        # TODO: 0 is only taking the first apicall, assuming no nested calls
-        return [ApiCalls.from_call(call) for call in node['_calls']][0]
+        return [ApiCalls.from_call(call) for call in node['_calls']]
     else:
         return []
 
@@ -234,3 +233,23 @@ STOP_WORDS = {  # CoreNLP English stop words
     "werent", "whats", "whens", "wheres", "whos", "whys", "wont", "wouldnt", "youd", "youll", "youre",
     "youve"
 }
+
+
+def full_flatten(L):
+    def flatten(B):    # function needed for code below;
+        A = []
+        for i in B:
+            if type(i) == list: A.extend(i)
+            else: A.append(i)
+        return A
+
+    outlist =[]; templist =[[]]
+    for sublist in L:
+        outlist = templist; templist = [[]]
+        for sitem in sublist:
+            for oitem in outlist:
+                newitem = [oitem]
+                if newitem == [[]]: newitem = [sitem]
+                else: newitem = [newitem[0], sitem]
+                templist.append(flatten(newitem))
+    return templist
