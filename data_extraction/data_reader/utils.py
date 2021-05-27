@@ -14,8 +14,11 @@
 
 from __future__ import print_function
 import argparse
+import itertools
 import re
 from itertools import chain
+
+from program_helper.set.apicalls import ApiCalls
 
 CONFIG_VOCAB = ['concept_dict', 'concept_dict_size',
                 'api_dict', 'api_dict_size',
@@ -114,6 +117,70 @@ def gather_calls(node):
         return node['_calls']
     else:
         return []
+
+
+def get_paths_topdown(node):
+    if type(node) is list:
+        out = []
+        for n in node:
+            out.extend(get_paths_topdown(n))
+        return out
+    node_type = node['node']
+    if node_type == 'DSubTree':
+        out = []
+        # out.append("DSubTree")
+        for n in node['_nodes']:
+            out.extend(get_paths_topdown(n))
+        return out
+
+    elif node_type == 'DBranch':
+        out = []
+        for child in [node['_cond'],node['_then'],node['_else']]:
+            paths = get_paths_topdown(child)
+            if len(paths)>0:
+                for path in paths:
+                    # path = [path]
+                    # path.insert(0, "DBranch")
+                    out.append(path)
+            else:
+                pass
+                # out.append(["DBranch"])
+        return out
+
+    elif node_type == 'DLoop':
+        out = []
+        for child in [node['_cond'],node['_body']]:
+            paths = get_paths_topdown(child)
+            if len(paths) > 0:
+                for path in paths:
+                    # path = [path]
+                    # path.insert(0, "DLoop")
+                    out.append(path)
+                else:
+                    pass
+                    # out.append(["DLoop"])
+        return out
+
+    elif node_type == 'DExcept':
+
+        out = []
+        for child in [node['_catch'], node['_try']]:
+            paths = get_paths_topdown(child)
+            if len(paths) > 0:
+                for path in paths:
+                    # path = [path]
+                    # path.insert(0, "DExcept")
+                    out.append(path)
+            else:
+                pass
+                # out.append(["DExcept"])
+        return out
+    elif node_type == 'DAPIInvoke':
+        # TODO: 0 is only taking the first apicall, assuming no nested calls
+        return [ApiCalls.from_call(call) for call in node['_calls']][0]
+    else:
+        return []
+
 
 def gather_extra_infos(node):
     """
