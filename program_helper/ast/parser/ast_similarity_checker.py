@@ -11,10 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from copy import deepcopy
 from itertools import chain
 
-from data_extraction.data_reader.utils import gather_calls
+from data_extraction.data_reader.utils import gather_calls, get_paths_topdown
 from program_helper.set.apicalls import ApiCalls
 from collections import defaultdict
 
@@ -58,58 +57,78 @@ class AstSimilarityChecker:
                  logger=None):
         self.logger = logger
         self.sum_jaccard = 0.
+        self.sum_jaccard_ast = 0.
+
         self.count = 0
         self.max_jaccard = 0.
         self.min_jaccard = None
 
-        self.min_distance_count = 0
-        self.min_distance_like_bayou = 0.0
+        self.max_similarity_count = 0
+        self.max_similarity_like_bayou = 0.0
+        self.max_similarity_like_bayou_ast = 0.0
 
-        self.min_distance_by_prog_length = MyDefaultDict((int, float, float))
+
+        self.max_similarity_by_prog_length = MyDefaultDict((int, float, float))
+
         return
 
     def reset_stats(self):
-        self.min_distance_count = 0
-        self.min_distance_like_bayou = 0.0
+        self.max_similarity_count = 0
+        self.max_similarity_like_bayou = 0.0
+        self.max_similarity_like_bayou_ast = 0.0
         self.sum_jaccard = 0.
+        self.sum_jaccard_ast = 0.
         self.count = 0
         self.max_jaccard = 0.
         self.min_jaccard = 0.
 
     def check_similarity_for_all_beams(self, real_ast_json, predicted_ast_jsons):
-        min_distance = 1.0
+        max_similarity = 0.0
+        max_similarity_ast = 0.0
         for pred_ast_json in predicted_ast_jsons:
-            distance = 1 - self.check_similarity(real_ast_json, pred_ast_json)
-            min_distance = min(distance, min_distance)
+            similarity, similarity_ast = self.check_similarity(real_ast_json, pred_ast_json)
+            max_similarity = max(similarity, max_similarity)
+            max_similarity_ast = max(similarity_ast, max_similarity_ast)
 
-        self.update_min_distance_stat(min_distance)
+        self.update_max_similarity_stat(max_similarity, max_similarity_ast)
 
-        self.update_min_distance_by_length_stat(min_distance, length=len(gather_calls(real_ast_json['ast'])))
-        return min_distance
+        self.update_max_similarity_by_length_stat(max_similarity, length=len(gather_calls(real_ast_json['ast'])))
+        return max_similarity
 
-    def update_min_distance_stat(self, min_distance):
-        self.min_distance_count += 1
-        self.min_distance_like_bayou += min_distance
+    def update_max_similarity_stat(self, max_similarity, max_similarity_ast):
+        self.max_similarity_count += 1
+        self.max_similarity_like_bayou += max_similarity
+        self.max_similarity_like_bayou_ast += max_similarity_ast
 
-    def update_min_distance_by_length_stat(self, min_distance, length):
-        curr_count, curr_distance, curr_avg_distance = self.min_distance_by_prog_length.get_value(length)
-        new_count, new_distance = curr_count + 1, curr_distance + min_distance
-        new_avg_distance = new_distance/new_count
-        self.min_distance_by_prog_length.set_value(length, new_count, new_distance, new_avg_distance)
+    def update_max_similarity_by_length_stat(self, max_similarity, length):
+        curr_count, curr_similarity, curr_avg_similarity = self.max_similarity_by_prog_length.get_value(length)
+        new_count, new_similarity = curr_count + 1, curr_similarity + max_similarity
+        new_avg_similarity = new_similarity/new_count
+        self.max_similarity_by_prog_length.set_value(length, new_count, new_similarity, new_avg_similarity)
 
 
     def check_similarity(self, real_ast, pred_ast):
         calls = gather_calls(real_ast['ast'])
+
+        paths_real = get_paths_topdown(real_ast['ast'])
+        # print(paths_real)
         apicalls1 = list(set(chain.from_iterable([ApiCalls.from_call(call)
                                                  for call in calls])))
 
         calls = gather_calls(pred_ast['ast'])
+        paths_pred = get_paths_topdown(pred_ast['ast'])
+
         apicalls2 = list(set(chain.from_iterable([ApiCalls.from_call(call)
                                                  for call in calls])))
 
-        distance = AstSimilarityChecker.get_jaccard_similarity(set(apicalls1), set(apicalls2))
-        self.update_statistics(distance)
-        return distance
+        # a = set([tuple(x) for x in paths_real])
+        # b = set([tuple(x) for x in paths_pred])
+
+        sim_ast = float(real_ast['ast'] == pred_ast['ast'])
+
+        similarity = AstSimilarityChecker.get_jaccard_similarity(set(apicalls1), set(apicalls2))
+        self.update_statistics(similarity, sim_ast)
+        return similarity, sim_ast
 
     @staticmethod
     def get_jaccard_similarity(setA, setB):
@@ -123,28 +142,33 @@ class AstSimilarityChecker:
         sim = len(setA & setB) / len(setA | setB)
         return sim
 
-    def update_statistics(self, curr_distance):
-        self.sum_jaccard += curr_distance
+    def update_statistics(self, curr_similarity, curr_similarity_ast):
+        self.sum_jaccard += curr_similarity
+        self.sum_jaccard_ast += curr_similarity_ast
         self.count += 1
-        if curr_distance > self.max_jaccard:
-            self.max_jaccard = curr_distance
-        if self.min_jaccard is None or curr_distance < self.min_jaccard:
-            self.min_jaccard = curr_distance
+        if curr_similarity > self.max_jaccard:
+            self.max_jaccard = curr_similarity
+        if self.min_jaccard is None or curr_similarity < self.min_jaccard:
+            self.min_jaccard = curr_similarity
 
 
     def print_stats(self):
-        avg_distance = self.sum_jaccard / (self.count + 0.00001)
+        avg_similarity = self.sum_jaccard / (self.count + 0.00001)
+        avg_similarity_ast = self.sum_jaccard_ast / (self.count + 0.00001)
         self.logger.info('')
-        self.logger.info('\tAverage Jaccard Similarity :: {0:0.4f}'.format( 1 - avg_distance))
+        self.logger.info('\tAverage Jaccard Similarity :: {0:0.4f}'.format( avg_similarity))
+        self.logger.info('\tAverage Jaccard Similarity ast :: {0:0.4f}'.format( avg_similarity_ast))
         # self.logger.info('\tMaximum Jaccard Similarity :: {0:0.4f}'.format(self.max_jaccard))
         # self.logger.info('\tMinimum Jaccard Similarity :: {0:0.4f}'.format(self.min_jaccard))
 
-        avg_min_bayou = self.min_distance_like_bayou / (self.min_distance_count + 0.00001)
-        self.logger.info('\tMaximum Jaccard Similarity amongst all beams :: {0:0.4f}'.format(1-avg_min_bayou))
+        avg_max_bayou = self.max_similarity_like_bayou / (self.max_similarity_count + 0.00001)
+        avg_max_bayou_ast = self.max_similarity_like_bayou_ast / (self.max_similarity_count + 0.00001)
+        self.logger.info('\tMaximum Jaccard Similarity amongst all beams :: {0:0.4f}'.format(avg_max_bayou))
+        self.logger.info('\tMaximum Jaccard Similarity ast amongst all beams :: {0:0.4f}'.format(avg_max_bayou_ast))
 
-        keys = self.min_distance_by_prog_length.keys()
+        keys = self.max_similarity_by_prog_length.keys()
         for k in sorted(keys):
-            val = self.min_distance_by_prog_length.get_item_at_id(k, id=2)
-            count = self.min_distance_by_prog_length.get_item_at_id(k, id=0)
+            val = self.max_similarity_by_prog_length.get_item_at_id(k, id=2)
+            count = self.max_similarity_by_prog_length.get_item_at_id(k, id=0)
             print("Length of program {} :: Average Maximum Jaccard Similarity amongst all beams :: {} count :: {}".
-                  format(k, truncate_two_decimals(1-val), count))
+                  format(k, truncate_two_decimals(val), count))
