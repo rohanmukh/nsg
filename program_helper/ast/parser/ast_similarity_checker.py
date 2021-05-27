@@ -93,16 +93,19 @@ class AstSimilarityChecker:
         max_similarity_seq = 0.0
         max_similarity_seq_calls = 0.0
         max_similarity_ast = 0.0
+        validity = False
         for pred_ast_json in predicted_ast_jsons:
-            similarity, similarity_seq, similarity_seq_calls, similarity_ast = self.check_similarity(real_ast_json, pred_ast_json)
-            max_similarity = max(similarity, max_similarity)
-            max_similarity_seq = max(similarity_seq, max_similarity_seq)
-            max_similarity_seq_calls = max(similarity_seq_calls, max_similarity_seq_calls)
-            max_similarity_ast = max(similarity_ast, max_similarity_ast)
+            similarity, similarity_seq, similarity_seq_calls, similarity_ast, valid = self.check_similarity(real_ast_json, pred_ast_json)
+            if valid:
+                validity = True
+                max_similarity = max(similarity, max_similarity)
+                max_similarity_seq = max(similarity_seq, max_similarity_seq)
+                max_similarity_seq_calls = max(similarity_seq_calls, max_similarity_seq_calls)
+                max_similarity_ast = max(similarity_ast, max_similarity_ast)
 
-        self.update_max_similarity_stat(max_similarity, max_similarity_seq, max_similarity_seq_calls, max_similarity_ast)
-
-        self.update_max_similarity_by_length_stat(max_similarity, length=len(gather_calls(real_ast_json['ast'])))
+        if validity:
+            self.update_max_similarity_stat(max_similarity, max_similarity_seq, max_similarity_seq_calls, max_similarity_ast)
+            self.update_max_similarity_by_length_stat(max_similarity, length=len(gather_calls(real_ast_json['ast'])))
         return max_similarity
 
     def update_max_similarity_stat(self, max_similarity, max_similarity_seq, max_similarity_seq_calls, max_similarity_ast):
@@ -128,18 +131,18 @@ class AstSimilarityChecker:
 
         apicalls1 = list(set(chain.from_iterable([ApiCalls.from_call(call)
                                                  for call in calls])))
-        real_paths = get_paths(real_ast_parsed)
-        real_paths_calls = get_paths_of_calls(real_ast_parsed)
+        real_paths = set(get_paths(real_ast_parsed)) - {()}
+        real_paths_calls = set(get_paths_of_calls(real_ast_parsed)) - {()}
 
 
         calls = gather_calls(pred_ast['ast'])
         pred_ast_parsed = self.simple_parser.form_ast(pred_ast['ast']['_nodes'])
-        pred_paths = get_paths(pred_ast_parsed)
-        pred_paths_calls = get_paths_of_calls(pred_ast_parsed)
+        pred_paths = set(get_paths(pred_ast_parsed)) - {()}
+        pred_paths_calls = set(get_paths_of_calls(pred_ast_parsed)) - {()}
 
 
-        sim_seq = AstSimilarityChecker.get_jaccard_similarity(set(real_paths), set(pred_paths))
-        sim_seq_calls = AstSimilarityChecker.get_jaccard_similarity(set(real_paths_calls), set(pred_paths_calls))
+        sim_seq = AstSimilarityChecker.get_jaccard_similarity(real_paths, pred_paths)
+        sim_seq_calls = AstSimilarityChecker.get_jaccard_similarity(real_paths_calls, pred_paths_calls)
 
 
         apicalls2 = list(set(chain.from_iterable([ApiCalls.from_call(call)
@@ -149,14 +152,18 @@ class AstSimilarityChecker:
         sim_ast = float(real_ast['ast'] == pred_ast['ast'])
 
         similarity = AstSimilarityChecker.get_jaccard_similarity(set(apicalls1), set(apicalls2))
-        self.update_statistics(similarity, sim_seq, sim_seq_calls, sim_ast)
-        return similarity, sim_seq, sim_seq_calls, sim_ast
+
+        valid = len(apicalls1) + len(apicalls2) > 0
+        if valid:
+            self.update_statistics(similarity, sim_seq, sim_seq_calls, sim_ast)
+
+        return similarity, sim_seq, sim_seq_calls, sim_ast, valid
 
     @staticmethod
     def get_jaccard_similarity(setA, setB):
 
         if (len(setA) == 0) and (len(setB) == 0):
-            return 0
+            return 1
 
         setA = set(setA)
         setB = set(setB)
