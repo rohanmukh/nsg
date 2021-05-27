@@ -14,7 +14,10 @@
 
 import json
 import os
+import re
 
+def stripJavaDoc(stringBody):
+    return re.sub(r'/\*\*(.*?)\*\/', '', stringBody.replace('\n',''))
 
 def dictOfset2list(inp_dict_of_set):
     for key, value in inp_dict_of_set.items():
