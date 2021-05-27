@@ -33,7 +33,7 @@ EXPANSION_UNLABELED_EDGE_TYPE_NAMES = ["Child", "Parent", "NextSibling",
                                        "NextToken", "NextUse"]
 
 class Model:
-    def __init__(self, config, top_k=5, gnn_node_vocab=None):
+    def __init__(self, config, top_k=5, gnn_node_vocab=None, weight_decay=0.):
         self.config = config
 
         self.nodes = tf.placeholder(tf.int32, [self.config.batch_size, self.config.max_ast_depth])
@@ -240,10 +240,10 @@ class Model:
                 self.gnn_inputs = tf.transpose(
                     self.eg_node_representations_to_rnn, [1, 0, 2])
 
-                #self.gnn_input = tf.cond(
-                #    self.placeholders['gnn_test'],
-                #    lambda: tf.reverse(self.gnn_inputs, [0]),
-                #    lambda: tf.identity(self.gnn_inputs))
+                self.gnn_inputs = tf.cond(
+                    self.placeholders['gnn_test'],
+                    lambda: tf.reverse(self.gnn_inputs, [0]),
+                    lambda: tf.identity(self.gnn_inputs))
 
                 #self.gnn_reverse = tf.reverse(self.gnn_inputs, [0])
                 #self.gnn_inputs = tf.unstack(tf.transpose(
@@ -332,10 +332,12 @@ class Model:
                 self.ast_top_k_indices.append(indices)
 
         with tf.name_scope("optimization"):
+            self.l2_loss = tf.add_n([tf.nn.l2_loss(v)
+                                for v in tf.trainable_variables()])
             opt = tf.compat.v1.train.AdamOptimizer(config.learning_rate)
             self.gen_loss = self.ast_gen_loss
             regularizor = tf.reduce_sum([tf.square(sigma) for sigma in self.encoder.program_encoder.sigmas])
-            self.loss = self.gen_loss #+ regularizor
+            self.loss = self.gen_loss + weight_decay * self.l2_loss #+ regularizor
             gen_train_ops = Model.get_var_list('both')
             self.train_op = opt.minimize(self.loss, var_list=gen_train_ops)
 
@@ -575,10 +577,10 @@ class Model:
 
             #gnn_info['node_ids'] = node_ids
 
-        #print(len(gnn_batch_data['eg_node_token_ids']))
-        #tt = sess.run([self.nodes, self.gnn_inputs, self.gnn_input_test], feed)
-        #print(tt[0].shape, tt[1].shape, tt[2].shape)
-        #import pdb; pdb.set_trace()
+        print(len(gnn_batch_data['eg_node_token_ids']))
+        tt = sess.run([self.nodes, self.gnn_inputs, self.gnn_input_test], feed)
+        print(tt[0].shape, tt[1].shape, tt[2].shape)
+        import pdb; pdb.set_trace()
 
         [ast_state, ast_symtab, unused_varflag, nullptr_varflag, beam_ids, beam_ln_probs] = sess.run(
             [self.decoder.program_decoder.ast_tree.state,
@@ -698,15 +700,39 @@ class Model:
             #old_all_var_mappers = input_data[self.all_var_mappers]
             #all_var_mappers = np.concatenate([old_all_var_mappers, all_var_mappers], 1)
 
-        apicalls = candy.types[14]
-        types = candy.types[15]
-        keywords = candy.types[16]
-        method = candy.types[17]
-        classname = candy.types[18]
-        javadoc_kws = candy.types[19]
-        surr_ret = candy.types[20]
-        surr_fp = candy.types[21]
-        surr_method = candy.types[22]
+            apicalls = candy.types[14]
+            types = candy.types[15]
+            keywords = candy.types[16]
+            method = candy.types[17]
+            classname = candy.types[18]
+            javadoc_kws = candy.types[19]
+            surr_ret = candy.types[20]
+            surr_fp = candy.types[21]
+            surr_method = candy.types[22]
+
+        else:
+            apicalls = np.zeros(
+                [self.config.batch_size, self.config.max_keywords], np.int32)
+            types = np.zeros(
+                [self.config.batch_size, self.config.max_keywords], np.int32)
+            keywords = np.zeros(
+                [self.config.batch_size, self.config.max_keywords], np.int32)
+
+            method = np.zeros(
+                [self.config.batch_size, self.config.max_camel_case], np.int32)
+            classname = np.zeros(
+                [self.config.batch_size, self.config.max_camel_case], np.int32)
+            javadoc_kws = np.zeros(
+                [self.config.batch_size, self.config.max_keywords], np.int32)
+
+            surr_ret = np.zeros(
+                [self.config.batch_size, self.config.max_keywords], np.int32)
+            surr_fp = np.zeros(
+                [self.config.batch_size, self.config.max_keywords,
+                 self.config.max_camel_case], np.int32)
+            surr_method = np.zeros(
+                [self.config.batch_size, self.config.max_keywords,
+                 self.config.max_camel_case], np.int32)
 
         feed_extra = {
             self.var_decl_ids.name: np.array(var_decl_ids, dtype=np.int32),

@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import print_function
 import numpy as np
+import time
 import os
 
 from data_extraction.data_reader.data_reader import Reader
@@ -45,8 +46,13 @@ class InferModelHelper:
 
         self.model_path = model_path
         self.infer_model = BayesianPredictor(model_path, batch_size=beam_width, seed=seed, depth=depth)
+
+        #self.infer_model = BayesianPredictor(
+        #    model_path, batch_size=beam_width, seed=seed, depth=None)
+
         self.prog_mapper = ProgramRevMapper(self.infer_model.config.vocab)
         self.visibility = visibility
+        self.ifgnn2nag = self.infer_model.config.decoder.ifnag
 
         self.max_num_data = max_num_data
         self.max_batches = max_num_data // beam_width
@@ -78,7 +84,8 @@ class InferModelHelper:
             infer=True,
             infer_vocab_path=os.path.join(self.model_path, 'config.json'),
             repair_mode=repair_mode,
-            dump_ast=reader_dumps_ast
+            dump_ast=reader_dumps_ast,
+            ifgnn2nag=self.ifgnn2nag
             )
         self.reader.read_file(filename=filepath,
                            max_num_data=self.max_num_data)
@@ -113,11 +120,12 @@ class InferModelHelper:
                             real_ast_jsons=None
                             ):
 
+        start_time = time.time()
         self.loader = Loader(data_path, self.infer_model.config)
         ## TODO: need to remove
         self.ast_checker.java_compiler = self.loader.program_reader.java_compiler
 
-        psis, mappers, method_embeddings = self.encode_inputs()
+        psis, mappers, method_embeddings, types = self.encode_inputs()
 
         jsons_synthesized, javas_synthesized = self.decode_programs(
             initial_state=psis,
@@ -126,7 +134,8 @@ class InferModelHelper:
             max_programs=max_programs,
             real_ast_jsons=None, #self.loader.program_reader.json_programs["programs"],
             mappers=mappers,
-            method_embeddings=method_embeddings
+            method_embeddings=method_embeddings,
+            types=types
         )
         # real_codes = self.extract_real_codes(self.loader.program_reader.json_programs)
 
@@ -140,6 +149,34 @@ class InferModelHelper:
             if dump_psis is True:
                 dump_json({'embeddings': [psi.tolist() for psi in psis]},
                           os.path.join(dump_result_path + '/EmbeddedProgramList.json'))
+
+        print('it takes {} secs to finish'.format(time.time() - start_time))
+        return
+
+    def get_jaccard_probabilities(self, data_path=None,
+                            debug_print=False,
+                            max_programs=None,
+                            real_ast_jsons=None
+                            ):
+
+        self.loader = Loader(data_path, self.infer_model.config)
+        ## TODO: need to remove
+        self.ast_checker.java_compiler = self.loader.program_reader.java_compiler
+
+        psis, mappers, method_embeddings = self.encode_inputs()
+
+        jsons_synthesized, javas_synthesized = self.decode_programs(
+            initial_state=psis,
+            debug_print=debug_print,
+            viability_check=False,
+            max_programs=max_programs,
+            real_ast_jsons=self.loader.program_reader.json_programs["programs"],
+            mappers=mappers,
+            method_embeddings=method_embeddings
+        )
+        # real_codes = self.extract_real_codes(self.loader.program_reader.json_programs)
+
+        # print(self.loader.program_reader.json_programs["programs"])
 
         return
 
@@ -156,6 +193,7 @@ class InferModelHelper:
         psis = []
         mappers = []
         method_embeddings = []
+        types = []
         batch_num = 0
         while True:
             try:
@@ -165,18 +203,20 @@ class InferModelHelper:
                     continue
             except StopIteration:
                 break
-            psi, all_var_mappers, method_embedding = self.infer_model.get_initial_state_from_next_batch(batch,
-                                                                                    visibility=self.visibility)
+            psi, all_var_mappers, method_embedding \
+                = self.infer_model.get_initial_state_from_next_batch(
+                    batch, visibility=self.visibility)
             psi_ = np.transpose(np.array(psi), [1, 0, 2])  # batch_first
             psis.extend(psi_)
             mappers.extend(all_var_mappers)
             method_embeddings.extend(method_embedding)
+            types.append(batch)
             self.prog_mapper.add_batched_data(batch)
             batch_num += 1
             if batch_num >= self.max_batches:
                 break
 
-        return psis, mappers, method_embeddings
+        return psis, mappers, method_embeddings, types
 
 
 
@@ -196,7 +236,10 @@ class InferModelHelper:
                     continue
             except StopIteration:
                 break
-            probs = self.infer_model.get_api_prob_from_next_batch(batch, visibility=self.visibility)
+
+            # TODO(ywen666): Double check the number of items.
+            probs = self.infer_model.get_api_prob_from_next_batch(
+                batch, visibility=self.visibility)[:-1]
             for j, prob in enumerate(probs):
                 total_prob[j] += prob[0] # Output is average over batch
                 total_nodes[j] += prob[1] # Output is average over batch
@@ -221,12 +264,16 @@ class InferModelHelper:
                         max_programs=None,
                         real_ast_jsons=None,
                         mappers=None,
-                        method_embeddings=None
+                        method_embeddings=None,
+                        types=None
                         ):
         jsons_synthesized = list()
         javas_synthesized = list()
         outcome_strings = ['' for _ in range(self.infer_model.config.batch_size)]
         sz = min(max_programs, len(initial_state)) if max_programs is not None else len(initial_state)
+
+        print('the length of initial state is {}'.format(sz))
+
         for i in range(sz):
             temp = [initial_state[i] for _ in range(self.infer_model.config.batch_size)]
             ast_nodes = self.program_beam_searcher.beam_search_memory(
@@ -236,12 +283,11 @@ class InferModelHelper:
                 field_types=self.prog_mapper.get_field_types(i),
                 surrounding=self.prog_mapper.get_surrounding(i),
                 mapper=mappers[i],
-                method_embedding=method_embeddings[i]
+                method_embedding=method_embeddings[i],
+                #types=types[0]
             )
             method_name = self.prog_mapper.get_reconstructed_method_name(i,
                                                                          vocab=self.infer_model.config.vocab.chars_kw)
-
-
 
             if viability_check:
                 fp_type_names, ret_typ_name, field_typ_names = self.prog_mapper.get_fp_ret_and_field_names(i,

@@ -5,7 +5,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_" \
                                   "BUS_ID"  # see issue #152
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 def permute_tensor(num_vars, batch_size, var_decl_id, units, symtab):
     var_range = tf.tile(tf.expand_dims(tf.range(0, num_vars), 0), [batch_size, 1])

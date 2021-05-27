@@ -17,6 +17,7 @@ from collections import defaultdict, Counter, OrderedDict, namedtuple, deque
 from typing import List, Dict, Any, Tuple, Iterable, Set, Optional
 
 import numpy as np
+import pickle
 import time
 import os
 
@@ -53,7 +54,8 @@ def train(clargs):
     loader = Loader(clargs.data, config)
     if config.decoder.ifnag:
         model = Model(config,
-                      gnn_node_vocab=loader.program_reader.vocab.gnn_node_dict)
+                      gnn_node_vocab=loader.program_reader.vocab.gnn_node_dict,
+                      weight_decay=1e-3)
     else:
         model = Model(config)
 
@@ -87,6 +89,8 @@ def train(clargs):
             avg_ast_gen_loss_concept, avg_ast_gen_loss_api, \
             avg_gen_loss_type, avg_gen_loss_clstype, avg_ast_gen_loss_var, \
             avg_ast_gen_loss_vardecl, avg_ast_gen_loss_method = 0., 0., 0., 0., 0., 0., 0.
+
+            avg_l2_loss = 0.
 
             error = 0
             for b in range(config.num_batches):
@@ -160,18 +164,19 @@ def train(clargs):
                     ast_gen_loss_concept, ast_gen_loss_api, \
                     ast_gen_loss_type, ast_gen_loss_clstype, ast_gen_loss_var, \
                     ast_gen_loss_vardecl, ast_gen_loss_method, \
-                    kl_loss, _, sigma = \
+                    kl_loss, _, sigma, l2_loss = \
                         sess.run([model.loss, model.ast_gen_loss,
-                                model.ast_gen_loss_concept, model.ast_gen_loss_api,
-                                model.ast_gen_loss_type, model.ast_gen_loss_clstype,
-                                model.ast_gen_loss_var, model.ast_gen_loss_vardecl, model.ast_gen_loss_method,
-                                model.KL_loss, model.train_op, model.encoder.program_encoder.sigmas], feed_dict=feed_dict)
+                                  model.ast_gen_loss_concept, model.ast_gen_loss_api,
+                                  model.ast_gen_loss_type, model.ast_gen_loss_clstype,
+                                  model.ast_gen_loss_var, model.ast_gen_loss_vardecl,
+                                  model.ast_gen_loss_method,
+                                  model.KL_loss, model.train_op,
+                                  model.encoder.program_encoder.sigmas,
+                                  model.l2_loss],
+                                 feed_dict=feed_dict)
                 except:
-                    logger.info('This batch has error, skip')
+                    logger.info('This batch {} has error, skip'.format(error))
                     error += 1
-                    if i == 0:
-                        with open('error_dict_{}.pickle'.format(error), 'wb') as handle:
-                            pickle.dump(feed_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
                     continue
 
                 #import pdb; pdb.set_trace()
@@ -189,6 +194,7 @@ def train(clargs):
                 avg_ast_gen_loss_vardecl += np.mean(ast_gen_loss_vardecl)
 
                 avg_kl_loss += np.mean(kl_loss)
+                avg_l2_loss += np.mean(l2_loss)
 
                 step = i * config.num_batches + b
                 if step % config.print_step == 0:
@@ -197,7 +203,7 @@ def train(clargs):
                                 'gen loss concept: {:.3f}, gen loss api: {:.3f}, '
                                 'gen loss type: {:.3f}, gen loss clstype: {:.3f}, gen loss var: {:.3f}, '
                                 'gen loss vardecl: {:.3f}, gen loss method: {:.3f}, '
-                                'KL loss: {:.3f}, elapased_time: {:.3f}'
+                                'KL loss: {:.3f}, l2 loss: {:.3f}, elapased_time: {:.3f}'
                                 .format(step,
                                         config.num_epochs * config.num_batches,
                                         i + 1, avg_loss / (b + 1), avg_ast_loss / (b + 1),
@@ -205,7 +211,7 @@ def train(clargs):
                                         avg_gen_loss_type / (b + 1), avg_gen_loss_clstype / (b + 1),
                                         avg_ast_gen_loss_var / (b + 1),
                                         avg_ast_gen_loss_vardecl / (b + 1), avg_ast_gen_loss_method / (b + 1),
-                                        avg_kl_loss / (b + 1),
+                                        avg_kl_loss / (b + 1), avg_l2_loss / (b + 1),
                                         time.time() - start_time))
                     logger.info('{}'.format([truncate_two_decimals(s) for s in sigma]))
 

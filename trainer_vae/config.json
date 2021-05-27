@@ -17,7 +17,7 @@
     "print_step": 100,
     "checkpoint_step": 1,
     "trunct_num_batch": null,
-    "max_ast_depth": 64,
+    "max_ast_depth": 85,
     "input_fp_depth": 10,
     "max_fields": 10,
     "max_camel_case": 3,

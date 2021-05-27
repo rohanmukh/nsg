@@ -367,13 +367,16 @@ class AstGenChecker(AstChecker):
 
             elif isinstance(node, DClsInit):
 
-                singlecallnode = node.get_child()
+                #singlecallnode = node.get_child()
+                singlecallnode = node.child.sibling.sibling
                 ret_id = singlecallnode.sibling.val
                 self.check_concept_node(singlecallnode, DAPICallSingle, parent_node_type=DClsInit)
                 api_name, _, ret_type = DAPIInvoke.split_api_call(singlecallnode.get_api_call_name())
                 # self.check_expr_type(node.get_expr_id(), expr_type, symtab, api_name, update_mode=update_mode)
-                self.check_ret_type(node.get_return_id(), ret_type, symtab, api_name,
+                self.check_ret_type(node.child.val, ret_type, symtab, api_name,
                                     update_mode=update_mode, nullptr=True, context=context)
+                #self.check_ret_type(node.get_return_id(), ret_type, symtab, api_name,
+                #                    update_mode=update_mode, nullptr=True, context=context)
                 self.check_formal_params(singlecallnode, symtab, update_mode=update_mode,
                                          parent_node_type=DClsInit, context=context)
                 self.objects_initialized.append(ret_id)
@@ -622,9 +625,13 @@ class AstGenChecker(AstChecker):
             self.nullptr_consistency = True
 
             self.num_statements = 0
+
+            #tt = self.ast_traverser.depth_first_search(ast_node)
+            #import pdb; pdb.set_trace()
             self.check_generated_progs(ast_node, init_symtab=init_symtab,
                                        return_type=ret_type,
                                        update_mode=update_mode)
+            #import pdb; pdb.set_trace()
 
 
             # check if any variable was left unused
