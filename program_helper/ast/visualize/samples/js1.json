@@ -1,0 +1,49 @@
+{
+  "javaDoc": "A main method for testing name matching.",
+  "body": "/** \n * A main method for testing name matching.\n */\npublic static void main(String[] args){\n  try {\n    System.out.println(\"Regular expression [\" + args[0] + \"]\");\n    NameParser parser=new NameParser();\n    StringMatcher matcher=parser.parse(args[0]);\n    for (int index=1; index < args.length; index++) {\n      String string=args[index];\n      System.out.print(\"String             [\" + string + \"]\");\n      System.out.println(\" -> match = \" + matcher.matches(args[index]));\n    }\n  }\n catch (  Exception ex) {\n    ex.printStackTrace();\n  }\n}\n",
+  "ast": {
+    "node": "DSubTree",
+    "_nodes": [
+      {
+        "node": "DExcept",
+        "_catch": [
+          {
+            "node": "DAPICall",
+            "expr_var_id": "system_package",
+            "_call": "java.io.PrintStream.println(java.lang.String)"
+          },
+          {
+            "node": "DLoop",
+            "_cond": [],
+            "_body": [
+              {
+                "node": "DAPICall",
+                "expr_var_id": "system_package",
+                "_call": "java.io.PrintStream.print(java.lang.String)"
+              },
+              {
+                "node": "DAPICall",
+                "expr_var_id": "system_package",
+                "_call": "java.io.PrintStream.println(char[])"
+              }
+            ]
+          }
+        ],
+        "_try": [
+          {
+            "node": "DAPICall",
+            "expr_var_id": "local_5",
+            "_call": "java.lang.Throwable.printStackTrace()"
+          }
+        ]
+      }
+    ]
+  },
+  "file": "/home/ubuntu/java_projects/proguard-maven-modules/proguard-base/src/main/java/proguard/util/NameParser.java",
+  "className": "NameParser",
+  "returnType": "void",
+  "method": "main@84",
+  "formalParam": [
+    "String[]"
+  ]
+}

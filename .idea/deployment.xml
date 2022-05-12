@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="rm38@garuda.cs.rice.edu:22" autoUploadExternalChanges="true">
+    <serverData>
+      <paths name="garuda">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="rm38@garuda.cs.rice.edu:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/rm38/Bayou_GAN" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>

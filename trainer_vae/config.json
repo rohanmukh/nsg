@@ -1,0 +1,34 @@
+{
+    "learning_rate": 0.0006,
+    "ev_drop_rate": [1.0, 1.0, 1.0,
+        0.1, 0.1,
+        0.1,
+        0.2, 0.2, 0.2, 0.2
+    ],
+    "ev_miss_rate": [1.0, 1.0, 1.0,
+        0.0, 0.0,
+        0.0,
+        0.0, 0.0, 0.2, 0.2
+    ],
+    "decoder_drop_rate": 1.0,
+    "latent_size": 256,
+    "batch_size": 128,
+    "num_epochs": 100,
+    "print_step": 100,
+    "checkpoint_step": 1,
+    "trunct_num_batch": null,
+    "max_ast_depth": 64,
+    "input_fp_depth": 10,
+    "max_fields": 10,
+    "max_camel_case": 3,
+    "max_keywords": 10,
+    "max_variables": 10,
+    "encoder": {
+        "units": 256,
+        "num_layers": 1
+    },
+    "decoder": {
+        "units": 256,
+        "num_layers": 1
+    }
+}

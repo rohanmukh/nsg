@@ -1,0 +1,24 @@
+{
+  "javaDoc": null,
+  "body": "public synchronized void close() throws IOException {\n  searcher.getIndexReader().decRef();\n}\n",
+  "ast": {
+    "node": "DSubTree",
+    "_nodes": [
+      {
+        "node": "DAPICall",
+        "expr_var_id": "system_package",
+        "_call": "java.lang.System.nanoTime()"
+      },
+      {
+        "node": "DAPICall",
+        "expr_var_id": "system_package",
+        "_call": "java.util.concurrent.TimeUnit.toSeconds(long)"
+      }
+    ]
+  },
+  "file": "/home/ubuntu/java_projects/frostwire-desktop/lib/jars-src/lucene-3.5.0/org/apache/lucene/search/SearcherLifetimeManager.java",
+  "className": "SearcherTracker",
+  "returnType": "void",
+  "method": "close@133",
+  "formalParam": []
+}

@@ -1,0 +1,167 @@
+# Copyright 2017 Rice University
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+from program_helper.ast.ops import DAPIInvoke
+from synthesis.ops.candidate_ast import SYMTAB_MOD, TYPE_NODE, API_NODE, VAR_NODE, OP_NODE, METHOD_NODE, CLSTYPE_NODE
+from utilities.vocab_building_dictionary import DELIM
+
+
+class AstReverseMapper:
+    def __init__(self, vocab):
+        self.vocab = vocab
+
+        self.nodes, self.edges, self.targets = [], [], []
+        self.var_decl_ids = []
+        self.node_type_numbers = []
+        self.type_helper_val, self.expr_type_val, self.ret_type_val = [], [], []
+        self.num_data = 0
+        return
+
+    def add_data(self, nodes, edges, targets,
+                 var_decl_ids,
+                 node_type_number,
+                 type_helper_val, expr_type_val, ret_type_val):
+
+
+        self.nodes.extend(nodes)
+        self.edges.extend(edges)
+        self.targets.extend(targets)
+        self.var_decl_ids.extend(var_decl_ids)
+
+        self.node_type_numbers.extend(node_type_number)
+
+        self.type_helper_val.extend(type_helper_val)
+        self.expr_type_val.extend(expr_type_val)
+        self.ret_type_val.extend(ret_type_val)
+        self.num_data += len(nodes)
+
+    def get_element(self, id):
+        return self.nodes[id], self.edges[id], self.targets[id], \
+               self.var_decl_ids[id], \
+               self.node_type_numbers[id], \
+               self.type_helper_val[id], self.expr_type_val[id], self.ret_type_val[id]
+
+    def decode_ast_paths(self, ast_element, partial=True):
+
+        nodes, edges, targets, \
+        var_decl_ids, \
+        node_type_numbers, \
+        type_helper_vals, expr_type_vals, ret_type_vals = ast_element
+
+        for node in nodes:
+            print(self.vocab.chars_concept[node], end=',')
+        print()
+        #
+        for edge in edges:
+            print(edge, end=',')
+        print()
+
+        for _, _, target, \
+            var_decl_id, \
+            node_type_numbers, \
+            type_helper_val, expr_type_val, ret_type_val in zip(*ast_element):
+            if node_type_numbers == SYMTAB_MOD:
+                print('--symtab--', end=',')
+            elif node_type_numbers == VAR_NODE:
+                print(self.vocab.chars_var[target], end=',')
+            elif node_type_numbers == TYPE_NODE:
+                print(self.vocab.chars_type[target], end=',')
+            elif node_type_numbers == CLSTYPE_NODE:
+                print(self.vocab.chars_type[target], end=',')
+            elif node_type_numbers == API_NODE:
+                api = self.vocab.chars_api[target]
+                api = api.split(DAPIInvoke.delimiter())[0]
+                print(api, end=',')
+            elif node_type_numbers == OP_NODE:
+                op = self.vocab.chars_op[target]
+                print(op, end=',')
+            elif node_type_numbers == METHOD_NODE:
+                op = self.vocab.chars_method[target]
+                print(op, end=',')
+            else:
+                print(self.vocab.chars_concept[target], end=',')
+        print()
+
+        if not partial:
+            for var_decl_id in var_decl_ids:
+                print(var_decl_id, end=',')
+            print()
+
+            for type_helper_val in type_helper_vals:
+                print(self.vocab.chars_type[type_helper_val], end=',')
+            print()
+
+            for expr_type_val in expr_type_vals:
+                print(self.vocab.chars_type[expr_type_val], end=',')
+            print()
+
+            for ret_type_val in ret_type_vals:
+                print(self.vocab.chars_type[ret_type_val], end=',')
+            print()
+
+            print()
+
+    def decode_ast_productions(self, ast_element):
+
+        nodes, edges, targets, \
+        var_decl_ids, \
+        node_type_numbers, \
+        type_helper_vals, expr_type_vals, ret_type_vals = ast_element
+
+        prod_lhss = []
+        for node in nodes:
+            lhs = self.vocab.chars_concept[node]
+            prod_lhss.append(lhs)
+
+        prod_edges = []
+        for edge in edges:
+            prod_edges.append(edge)
+
+        prod_rhss = []
+        for _, _, target, \
+            var_decl_id, \
+            node_type_numbers, \
+            type_helper_val, expr_type_val, ret_type_val in zip(*ast_element):
+            if node_type_numbers == SYMTAB_MOD:
+                rhs = '--symtab--'
+            elif node_type_numbers == VAR_NODE:
+                rhs = self.vocab.chars_var[target]
+            elif node_type_numbers == TYPE_NODE:
+                rhs = self.vocab.chars_type[target]
+            elif node_type_numbers == CLSTYPE_NODE:
+                rhs = self.vocab.chars_type[target]
+            elif node_type_numbers == API_NODE:
+                api = self.vocab.chars_api[target]
+                rhs = api.split(DAPIInvoke.delimiter())[0]
+            elif node_type_numbers == OP_NODE:
+                rhs = self.vocab.chars_op[target]
+            elif node_type_numbers == METHOD_NODE:
+                rhs = self.vocab.chars_method[target]
+            else:
+                rhs = self.vocab.chars_concept[target]
+            prod_rhss.append(rhs)
+
+        for lhs, edge, rhs in zip(prod_lhss, prod_edges, prod_rhss):
+            if rhs == DELIM:
+                continue
+            print("{}-----{}------>{}".format(lhs, edge, rhs))
+
+
+
+
+    def reset(self):
+        self.nodes, self.edges, self.targets = [], [], []
+        self.var_decl_ids = []
+        self.node_type_numbers = []
+        self.type_helper_val, self.expr_type_val, self.ret_type_val = [], [], []
+        self.num_data = 0

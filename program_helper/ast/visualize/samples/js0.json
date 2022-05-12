@@ -1,0 +1,63 @@
+{
+  "javaDoc": null,
+  "body": "public StringMatcher parse(String regularExpression){\n  int index;\n  StringMatcher nextMatcher=new EmptyStringMatcher();\n  for (index=0; index < regularExpression.length(); index++) {\n    if (regularExpression.charAt(index) == '*') {\n      nextMatcher=new VariableStringMatcher(null,null,0,Integer.MAX_VALUE,parse(regularExpression.substring(index + 1)));\n      break;\n    }\n else     if (regularExpression.charAt(index) == '?') {\n      nextMatcher=new VariableStringMatcher(null,null,1,1,parse(regularExpression.substring(index + 1)));\n      break;\n    }\n  }\n  return index != 0 ? (StringMatcher)new FixedStringMatcher(regularExpression.substring(0,index),nextMatcher) : (StringMatcher)nextMatcher;\n}\n",
+  "ast": {
+    "node": "DSubTree",
+    "_nodes": [
+      {
+        "node": "DLoop",
+        "_cond": [
+          {
+            "node": "DAPICall",
+            "expr_var_id": "local_0",
+            "_call": "java.lang.String.length()"
+          }
+        ],
+        "_body": [
+          {
+            "node": "DBranch",
+            "_cond": [
+              {
+                "node": "DAPICall",
+                "_call": "java.lang.String.charAt(int)"
+              }
+            ],
+            "_else": [
+              {
+                "node": "DAPICall",
+                "expr_var_id": "local_0",
+                "_call": "java.lang.String.substring(int)"
+              }
+            ],
+            "_then": [
+              {
+                "node": "DBranch",
+                "_cond": [
+                  {
+                    "node": "DAPICall",
+                    "_call": "java.lang.String.charAt(int)"
+                  }
+                ],
+                "_else": [
+                  {
+                    "node": "DAPICall",
+                    "expr_var_id": "local_0",
+                    "_call": "java.lang.String.substring(int)"
+                  }
+                ],
+                "_then": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "file": "/home/ubuntu/java_projects/proguard-maven-modules/proguard-base/src/main/java/proguard/util/NameParser.java",
+  "className": "NameParser",
+  "returnType": "StringMatcher",
+  "method": "parse@39",
+  "formalParam": [
+    "String"
+  ]
+}
